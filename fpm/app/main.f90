@@ -7,8 +7,10 @@ use fpm_command_line, only: &
         fpm_test_settings, &
         fpm_install_settings, &
         fpm_update_settings, &
+        fpm_dist_settings, &
         get_command_line_settings
 use fpm, only: cmd_build, cmd_run
+use fpm_cmd_dist, only: cmd_dist
 use fpm_cmd_install, only: cmd_install
 use fpm_cmd_new, only: cmd_new
 use fpm_cmd_update, only : cmd_update
@@ -30,6 +32,8 @@ type is (fpm_test_settings)
     call cmd_run(settings,test=.true.)
 type is (fpm_install_settings)
     call cmd_install(settings)
+type is (fpm_dist_settings)
+    call cmd_dist(settings)
 type is (fpm_update_settings)
     call cmd_update(settings)
 end select

@@ -22,7 +22,7 @@ module fpm_manifest
 
     public :: get_package_data, default_executable, default_library, default_test
     public :: default_example
-    public :: package_config_t, dependency_config_t
+    public :: package_config_t, dependency_config_t, executable_config_t
 
 
 contains

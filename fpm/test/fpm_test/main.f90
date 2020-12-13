@@ -9,6 +9,7 @@ program fpm_testing
     use test_module_dependencies, only : collect_module_dependencies
     use test_package_dependencies, only : collect_package_dependencies
     use test_backend, only: collect_backend
+    use test_dist_meson, only : collect_dist_meson
     use test_installer, only : collect_installer
     use test_versioning, only : collect_versioning
     implicit none
@@ -26,6 +27,7 @@ program fpm_testing
         & new_testsuite("fpm_module_dependencies", collect_module_dependencies), &
         & new_testsuite("fpm_package_dependencies", collect_package_dependencies), &
         & new_testsuite("fpm_test_backend", collect_backend), &
+        & new_testsuite("fpm_dist_meson", collect_dist_meson), &
         & new_testsuite("fpm_installer", collect_installer), &
         & new_testsuite("fpm_versioning", collect_versioning) &
         & ]

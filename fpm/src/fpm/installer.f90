@@ -8,7 +8,8 @@ module fpm_installer
   use fpm_environment, only : get_os_type, os_is_unix
   use fpm_error, only : error_t, fatal_error
   use fpm_filesystem, only : join_path, mkdir, exists, unix_path, windows_path, &
-    env_variable
+    env_variable, list_files, is_dir
+  use fpm_strings, only : string_t
   implicit none
   private
 
@@ -40,6 +41,10 @@ module fpm_installer
     procedure :: install_library
     !> Install a header/module in its correct subdirectory
     procedure :: install_header
+    !> Install a list of files
+    procedure :: install_list
+    !> Install a complete subdirectory structure
+    procedure :: install_subdir
     !> Install a generic file into a subdirectory in the installation prefix
     procedure :: install
     !> Run an installation command, type-bound for unit testing purposes
@@ -205,6 +210,66 @@ contains
 
     call self%install(header, self%includedir, error)
   end subroutine install_header
+
+  !> Install a complete subdirectory structure
+  subroutine install_list(self, sources, destination, subdir, error)
+    !> Instance of the installer
+    class(installer_t), intent(inout) :: self
+    !> Files to install
+    type(string_t), intent(in) :: sources(:)
+    !> Path to the destination inside the prefix
+    character(len=*), intent(in) :: destination
+    !> Base subdirectory of the files
+    character(len=*), intent(in) :: subdir
+    !> Error handling
+    type(error_t), allocatable, intent(out) :: error
+
+    integer :: i, j
+    character(len=:), allocatable :: install_dest
+
+    do i = 1, size(sources)
+      j = index(sources(i)%s, subdir) + len(subdir) + 1
+      install_dest = join_path(destination, sources(i)%s(j:))
+      j = scan(install_dest, '\/', back=.true.)
+      call self%install(sources(i)%s, install_dest(:j), error)
+      if (allocated(error)) exit
+    end do
+    if (allocated(error)) return
+
+  end subroutine install_list
+
+  !> Install a complete subdirectory structure
+  recursive subroutine install_subdir(self, directory, destination, recurse, error)
+    !> Instance of the installer
+    class(installer_t), intent(inout) :: self
+    !> Directory path to install
+    character(len=*), intent(in) :: directory
+    !> Path to the destination inside the prefix
+    character(len=*), intent(in) :: destination
+    !> Include subdirectory recursively
+    logical, intent(in) :: recurse
+    !> Error handling
+    type(error_t), allocatable, intent(out) :: error
+
+    integer :: i, j
+    type(string_t), allocatable :: file_names(:)
+    character(len=:), allocatable :: subdir
+
+    call list_files(directory, file_names, recurse=.false.)
+
+    do i = 1, size(file_names)
+      if (is_dir(file_names(i)%s) .and. recurse) then
+        j = index(file_names(i)%s, directory) + len(directory) + 1
+        subdir = join_path(destination, file_names(i)%s(j:))
+        call self%install_subdir(file_names(i)%s, subdir, recurse, error)
+      else
+        call self%install(file_names(i)%s, destination, error)
+      end if
+      if (allocated(error)) exit
+    end do
+    if (allocated(error)) return
+
+  end subroutine install_subdir
 
   !> Install a generic file into a subdirectory in the installation prefix
   subroutine install(self, source, destination, error)

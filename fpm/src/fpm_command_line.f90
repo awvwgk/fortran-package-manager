@@ -42,6 +42,7 @@ public :: fpm_cmd_settings, &
           fpm_run_settings, &
           fpm_test_settings, &
           fpm_update_settings, &
+          fpm_dist_settings, &
           get_command_line_settings
 
 type, abstract :: fpm_cmd_settings
@@ -89,6 +90,12 @@ type, extends(fpm_cmd_settings)  :: fpm_update_settings
     logical :: clean
 end type
 
+!> Distribution mode for projects
+type, extends(fpm_build_settings)  :: fpm_dist_settings
+    logical :: include_deps
+    logical :: meson
+end type
+
 character(len=:),allocatable :: name
 character(len=:),allocatable :: os_type
 character(len=ibug),allocatable :: names(:) 
@@ -98,10 +105,11 @@ character(len=:), allocatable :: version_text(:)
 character(len=:), allocatable :: help_new(:), help_fpm(:), help_run(:), &
                  & help_test(:), help_build(:), help_usage(:), help_runner(:), &
                  & help_text(:), help_install(:), help_help(:), help_update(:), &
+                 & help_dist(:), &
                  & help_list(:), help_list_dash(:), help_list_nodash(:)
 character(len=20),parameter :: manual(*)=[ character(len=20) ::&
 &  ' ',     'fpm',     'new',   'build',  'run',     &
-&  'test',  'runner', 'install', 'update', 'list',   'help',   'version'  ]
+&  'test',  'runner', 'install', 'update', 'dist', 'list',   'help',   'version'  ]
 
 character(len=:), allocatable :: val_runner, val_build, val_compiler
 
@@ -288,6 +296,8 @@ contains
                    help_text=[character(len=widest) :: help_text, help_list]
                 case('update ' )
                    help_text=[character(len=widest) :: help_text, help_update]
+                case('dist   ' )
+                   help_text=[character(len=widest) :: help_text, help_dist]
                 case('help   ' )
                    help_text=[character(len=widest) :: help_text, help_help]
                 case('version' )
@@ -381,6 +391,17 @@ contains
                 fetch_only=lget('fetch-only'), verbose=lget('verbose'), &
                 clean=lget('clean'))
 
+        case('dist')
+            call set_args('--meson F --include-deps F --verbose F', &
+                help_dist, version_text)
+
+            allocate(fpm_dist_settings :: cmd_settings)
+            cmd_settings=fpm_dist_settings(&
+                verbose=lget('verbose'), &
+                include_deps=lget('include-deps'), &
+                meson=lget('meson'),&
+                build_name="debug", compiler="gfortran")  ! dummy values
+
         case default
 
             call set_args('&
@@ -468,6 +489,7 @@ contains
    '  test      Run the test programs                                       ', &
    '  update    Update and manage project dependencies                      ', &
    '  install   Install project                                             ', &
+   '  dist      Create standalone source distributions                      ', &
    '                                                                        ', &
    ' Enter "fpm --list" for a brief list of subcommand options. Enter       ', &
    ' "fpm --help" or "fpm SUBCOMMAND --help" for detailed descriptions.     ', &
@@ -484,6 +506,7 @@ contains
    ' test [[--target] NAME(s)] [--release] [--runner "CMD"] [--list]                ', &
    '      [--compiler COMPILER_NAME] [-- ARGS]                                      ', &
    ' install [--release] [--no-rebuild] [--prefix PATH] [options]                   ', &
+   ' dist [--include-deps] [--meson] [--verbose]                                    ', &
    ' ']
     help_usage=[character(len=80) :: &
     '' ]
@@ -585,6 +608,7 @@ contains
     '  + help  Alternate method for displaying subcommand help.             ', &
     '  + list  Display brief descriptions of all subcommands.               ', &
     '  + install Install project                                            ', &
+    '  + dist  Create standalone source code distributions                  ', &
     '                                                                       ', &
     '  Their syntax is                                                      ', &
     '                                                                       ', &
@@ -596,6 +620,7 @@ contains
     '     help [NAME(s)]                                                    ', &
     '     list [--list]                                                     ', &
     '     install [--release] [--no-rebuild] [--prefix PATH] [options]      ', &
+    '     dist [--include-deps] [--meson]                                   ', &
     '                                                                       ', &
     'SUBCOMMAND OPTIONS                                                     ', &
     '  --release  Builds or runs in release mode (versus debug mode). fpm(1)', &
@@ -916,6 +941,25 @@ contains
     ' --fetch-only  Only fetch dependencies, do not update existing projects', &
     ' --clean       Do not use previous dependency cache', &
     ' --verbose     Show additional printout', &
+    '', &
+    'SEE ALSO', &
+    ' The fpm(1) home page at https://github.com/fortran-lang/fpm', &
+    '' ]
+    help_dist=[character(len=80) :: &
+    'NAME', &
+    ' fpm-dist(1) - create project distributions', &
+    '', &
+    'SYNOPSIS', &
+    ' fpm dist [--include-deps] [--meson] [--verbose]', &
+    '', &
+    'DESCRIPTION', &
+    ' Create standalone source code distributions. Generated distributions can', &
+    ' be used with fpm itself or include build configurations for other tools.', &
+    '', &
+    'OPTIONS', &
+    ' --include-deps  Redistribute dependencies', &
+    ' --meson         Create meson.build files (implies --include-deps)', &
+    ' --verbose       Show additional printout', &
     '', &
     'SEE ALSO', &
     ' The fpm(1) home page at https://github.com/fortran-lang/fpm', &

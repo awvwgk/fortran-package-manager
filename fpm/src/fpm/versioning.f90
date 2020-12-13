@@ -221,7 +221,7 @@ contains
     end subroutine token_error
 
 
-    subroutine to_string(self, string)
+    pure subroutine to_string(self, string)
 
         !> Version number
         class(version_t), intent(in) :: self
@@ -250,7 +250,7 @@ contains
     end subroutine to_string
 
 
-    function as_string(self) result(string)
+    pure function as_string(self) result(string)
 
         !> Version number
         class(version_t), intent(in) :: self
