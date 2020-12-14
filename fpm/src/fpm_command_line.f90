@@ -79,6 +79,7 @@ type, extends(fpm_build_settings) :: fpm_install_settings
     character(len=:), allocatable :: libdir
     character(len=:), allocatable :: includedir
     logical :: no_rebuild
+    character(len=:), allocatable :: tcl_env
 end type
 
 !> Settings for interacting and updating with project dependencies
@@ -303,7 +304,8 @@ contains
         case('install')
             call set_args('--release F --no-rebuild F --verbose F --prefix " " &
                 & --compiler "'//get_env('FPM_COMPILER','gfortran')//'" &
-                & --libdir "lib" --bindir "bin" --includedir "include"', &
+                & --libdir "lib" --bindir "bin" --includedir "include" &
+                & --tcl-env ""', &
                 help_install, version_text)
 
             call check_build_vals()
@@ -318,6 +320,7 @@ contains
             call get_char_arg(install_settings%libdir, 'libdir')
             call get_char_arg(install_settings%bindir, 'bindir')
             call get_char_arg(install_settings%includedir, 'includedir')
+            call get_char_arg(install_settings%tcl_env, 'tcl-env')
             call move_alloc(install_settings, cmd_settings)
 
         case('list')

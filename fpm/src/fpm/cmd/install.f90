@@ -3,12 +3,14 @@ module fpm_cmd_install
   use fpm_backend, only : build_package
   use fpm_command_line, only : fpm_install_settings
   use fpm_error, only : error_t, fatal_error
+  use fpm_dist_tcl, only : write_tcl_env
   use fpm_filesystem, only : join_path, list_files
   use fpm_installer, only : installer_t, new_installer
   use fpm_manifest, only : package_config_t, get_package_data
   use fpm_model, only : fpm_model_t, build_target_t, FPM_TARGET_EXECUTABLE, &
     FPM_SCOPE_APP
   use fpm_strings, only : string_t
+  use fpm_versioning, only : char
   implicit none
   private
 
@@ -24,7 +26,7 @@ contains
     type(error_t), allocatable :: error
     type(fpm_model_t) :: model
     type(installer_t) :: installer
-    character(len=:), allocatable :: lib, exe, dir
+    character(len=:), allocatable :: lib, exe, dir, module_file
     logical :: installable
 
     call get_package_data(package, "fpm.toml", error, apply_defaults=.true.)
@@ -61,6 +63,14 @@ contains
 
     if (allocated(package%executable)) then
       call install_executables(installer, model, error)
+      call handle_error(error)
+    end if
+
+    if (allocated(settings%tcl_env)) then
+      module_file = join_path(model%output_directory, char(package%version))
+      call write_tcl_env(module_file, package, installer)
+      call installer%run(installer%copy//' "'//module_file//'" "'// &
+        join_path(settings%tcl_env, package%name)//'"', error)
       call handle_error(error)
     end if
 
