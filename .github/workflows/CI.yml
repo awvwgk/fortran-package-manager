@@ -153,3 +153,31 @@ jobs:
         file_glob: true
         tag: ${{ github.ref }}
         overwrite: true
+
+  Docker-Build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [arm64]
+
+    steps:
+    - uses: actions/checkout@v2
+    - run: docker run --rm --privileged multiarch/qemu-user-static:register --reset
+    - uses: docker://multiarch/ubuntu-core:arm64-focal
+      with:
+        args: >
+          bash -exc
+          "uname -a;
+          apt-get update;
+          apt-get install -qy git haskell-stack gfortran;
+          cd /github/workspace;
+          ls;
+          pushd bootstrap;
+          stack build;
+          stack install --local-bin-path /usr/bin;
+          popd;
+          cd fpm;
+          fpm run --flag --static --flag -g --flag -fbacktrace --flag -O3 --runner cp -- fpm;
+          popd;
+          "
