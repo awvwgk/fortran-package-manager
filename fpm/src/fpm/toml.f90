@@ -13,6 +13,7 @@
 !> For more details on the library used see the
 !> [TOML-Fortran](https://toml-f.github.io/toml-f) developer pages.
 module fpm_toml
+    use stdlib_string_type, string_t => string_type
     use fpm_error, only : error_t, fatal_error, file_not_found_error
     use fpm_strings, only : string_t
     use tomlf, only : toml_table, toml_array, toml_key, toml_stat, get_value, &
@@ -99,7 +100,7 @@ contains
                     call fatal_error(error, "Entry in "//key//" field cannot be read")
                     exit
                 end if
-                call move_alloc(str, list(ilist)%s)
+                list(ilist) = str
             end do
             if (allocated(error)) return
         else
@@ -110,7 +111,7 @@ contains
             end if
             if (allocated(str)) then
                 allocate(list(1))
-                call move_alloc(str, list(1)%s)
+                list(1) = str
             end if
         end if
 

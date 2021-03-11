@@ -19,7 +19,8 @@
 !>
 module fpm_model
 use iso_fortran_env, only: int64
-use fpm_strings, only: string_t, str
+use stdlib_string_type, string_t => string_type
+use fpm_strings, only: str
 use fpm_dependency, only: dependency_tree_t
 implicit none
 
@@ -184,7 +185,7 @@ function info_srcfile(source) result(s)
     !    type(string_t), allocatable :: modules_provided(:)
     s = s // ", modules_provided=["
     do i = 1, size(source%modules_provided)
-        s = s // '"' // source%modules_provided(i)%s // '"'
+        s = s // '"' // char(source%modules_provided(i)) // '"'
         if (i < size(source%modules_provided)) s = s // ", "
     end do
     s = s // "]"
@@ -211,21 +212,21 @@ function info_srcfile(source) result(s)
     !    type(string_t), allocatable :: modules_used(:)
     s = s // ", modules_used=["
     do i = 1, size(source%modules_used)
-        s = s // '"' // source%modules_used(i)%s // '"'
+        s = s // '"' // char(source%modules_used(i)) // '"'
         if (i < size(source%modules_used)) s = s // ", "
     end do
     s = s // "]"
     !    type(string_t), allocatable :: include_dependencies(:)
     s = s // ", include_dependencies=["
     do i = 1, size(source%include_dependencies)
-        s = s // '"' // source%include_dependencies(i)%s // '"'
+        s = s // '"' // char(source%include_dependencies(i)) // '"'
         if (i < size(source%include_dependencies)) s = s // ", "
     end do
     s = s // "]"
     !    type(string_t), allocatable :: link_libraries(:)
     s = s // ", link_libraries=["
     do i = 1, size(source%link_libraries)
-        s = s // '"' // source%link_libraries(i)%s // '"'
+        s = s // '"' // char(source%link_libraries(i)) // '"'
         if (i < size(source%link_libraries)) s = s // ", "
     end do
     s = s // "]"
@@ -269,7 +270,7 @@ function info_model(model) result(s)
     !    type(string_t), allocatable :: link_libraries(:)
     s = s // ", link_libraries=["
     do i = 1, size(model%link_libraries)
-        s = s // '"' // model%link_libraries(i)%s // '"'
+        s = s // '"' // char(model%link_libraries(i)) // '"'
         if (i < size(model%link_libraries)) s = s // ", "
     end do
     s = s // "]"

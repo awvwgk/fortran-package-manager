@@ -3,12 +3,18 @@
 !! * [get_os_type] -- Determine the OS type
 !! * [get_env] -- return the value of an environment variable
 module fpm_environment
+    use stdlib_string_type, string_t => string_type
     implicit none
     private
     public :: get_os_type
     public :: os_is_unix
     public :: run
     public :: get_env
+
+    interface run
+        module procedure :: run_str
+        module procedure :: run_char
+    end interface run
 
     integer, parameter, public :: OS_UNKNOWN = 0
     integer, parameter, public :: OS_LINUX   = 1
@@ -125,7 +131,7 @@ contains
     end function os_is_unix
 
     !> echo command string and pass it to the system for execution
-    subroutine run(cmd,echo)
+    subroutine run_char(cmd,echo)
         character(len=*), intent(in) :: cmd
         logical,intent(in),optional  :: echo
         logical :: echo_local
@@ -143,7 +149,13 @@ contains
             print *, 'Command failed'
             error stop
         end if
-    end subroutine run
+    end subroutine run_char
+
+    subroutine run_str(cmd,echo)
+        type(string_t), intent(in) :: cmd
+        logical,intent(in),optional  :: echo
+        call run(char(cmd), echo)
+    end subroutine run_str
 
     !> get named environment variable value. It it is blank or
     !! not set return the optional default value

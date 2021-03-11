@@ -29,16 +29,13 @@
 
 module fpm_strings
 use iso_fortran_env, only: int64
+use stdlib_string_type, string_t => string_type
 implicit none
 
 private
 public :: f_string, lower, split, str_ends_with, string_t
 public :: string_array_contains, string_cat, len_trim, operator(.in.), fnv_1a
 public :: replace, resize, str, join, glob
-
-type string_t
-    character(len=:), allocatable :: s
-end type
 
 interface len_trim
     module procedure :: string_len_trim
@@ -49,7 +46,12 @@ interface resize
 end interface
 
 interface operator(.in.)
-    module procedure string_array_contains
+    module procedure string_array_contains_char
+    module procedure string_array_contains_string
+end interface
+interface string_array_contains
+    module procedure string_array_contains_char
+    module procedure string_array_contains_string
 end interface
 
 interface fnv_1a
@@ -152,10 +154,10 @@ pure function fnv_1a_string_t(input, seed) result(hash)
 
     integer :: i
 
-    hash = fnv_1a(input(1)%s,seed)
+    hash = fnv_1a(char(input(1)),seed)
 
     do i=2,size(input)
-        hash = fnv_1a(input(i)%s,hash)
+        hash = fnv_1a(char(input(i)),hash)
     end do
 
 end function fnv_1a_string_t
@@ -196,16 +198,27 @@ end function lower
 
 !> Check if array of TYPE(STRING_T) matches a particular CHARACTER string
 !!
-logical function string_array_contains(search_string,array)
+logical function string_array_contains_char(search_string,array)
     character(*), intent(in) :: search_string
     type(string_t), intent(in) :: array(:)
 
     integer :: i
 
-    string_array_contains = any([(array(i)%s==search_string, &
+    string_array_contains_char = any([(array(i)==search_string, &
                                    i=1,size(array))])
 
-end function string_array_contains
+end function string_array_contains_char
+
+logical function string_array_contains_string(search_string,array)
+    type(string_t), intent(in) :: search_string
+    type(string_t), intent(in) :: array(:)
+
+    integer :: i
+
+    string_array_contains_string = any([(array(i)==search_string, &
+                                   i=1,size(array))])
+
+end function string_array_contains_string
 
 !> Concatenate an array of type(string_t) into
 !>  a single CHARACTER variable
@@ -228,10 +241,10 @@ function string_cat(strings,delim) result(cat)
         delim_str = ''
     end if
 
-    cat = strings(1)%s
+    cat = char(strings(1))
     do i=2,size(strings)
 
-        cat = cat//delim_str//strings(i)%s
+        cat = cat//delim_str//char(strings(i))
 
     end do
 
@@ -244,7 +257,7 @@ pure function string_len_trim(strings) result(n)
 
     n = 0
     do i=1,size(strings)
-        n = n + len_trim(strings(i)%s)
+        n = n + len_trim(strings(i))
     end do
 
 end function string_len_trim
@@ -409,7 +422,7 @@ subroutine resize_string(list, n)
   if (allocated(tmp)) then
     this_size = min(size(tmp, 1), size(list, 1))
     do i = 1, this_size
-      call move_alloc(tmp(i)%s, list(i)%s)
+      list(i) = tmp(i)
     end do
     deallocate(tmp)
   end if

@@ -25,11 +25,12 @@
 !>
 module fpm_targets
 use iso_fortran_env, only: int64
+use stdlib_string_type, string_t => string_type
 use fpm_error, only: error_t, fatal_error
 use fpm_model
 use fpm_environment, only: get_os_type, OS_WINDOWS
 use fpm_filesystem, only: dirname, join_path, canon_path
-use fpm_strings, only: string_t, operator(.in.), string_cat
+use fpm_strings, only: operator(.in.), string_cat
 implicit none
 
 private
@@ -350,7 +351,7 @@ subroutine resolve_module_dependencies(targets,error)
 
             do j=1,size(targets(i)%ptr%source%modules_used)
 
-                if (targets(i)%ptr%source%modules_used(j)%s .in. targets(i)%ptr%source%modules_provided) then
+                if (targets(i)%ptr%source%modules_used(j) .in. targets(i)%ptr%source%modules_provided) then
                     ! Dependency satisfied in same file, skip
                     cycle
                 end if
@@ -358,18 +359,18 @@ subroutine resolve_module_dependencies(targets,error)
                 if (any(targets(i)%ptr%source%unit_scope == &
                     [FPM_SCOPE_APP, FPM_SCOPE_EXAMPLE, FPM_SCOPE_TEST])) then
                     dep%ptr => &
-                        find_module_dependency(targets,targets(i)%ptr%source%modules_used(j)%s, &
+                        find_module_dependency(targets,char(targets(i)%ptr%source%modules_used(j)), &
                                             include_dir = dirname(targets(i)%ptr%source%file_name))
                 else
                     dep%ptr => &
-                        find_module_dependency(targets,targets(i)%ptr%source%modules_used(j)%s)
+                        find_module_dependency(targets,char(targets(i)%ptr%source%modules_used(j)))
                 end if
 
                 if (.not.associated(dep%ptr)) then
                     call fatal_error(error, &
-                            'Unable to find source for module dependency: "' // &
-                            targets(i)%ptr%source%modules_used(j)%s // &
-                            '" used by "'//targets(i)%ptr%source%file_name//'"')
+                            char('Unable to find source for module dependency: "' // &
+                            targets(i)%ptr%source%modules_used(j) // &
+                            '" used by "'//targets(i)%ptr%source%file_name//'"'))
                     return
                 end if
 
@@ -402,7 +403,7 @@ function find_module_dependency(targets,module_name,include_dir) result(target_p
 
         do l=1,size(targets(k)%ptr%source%modules_provided)
 
-            if (module_name == targets(k)%ptr%source%modules_provided(l)%s) then
+            if (module_name == targets(k)%ptr%source%modules_provided(l)) then
                 select case(targets(k)%ptr%source%unit_scope)
                 case (FPM_SCOPE_LIB, FPM_SCOPE_DEP)
                     target_ptr => targets(k)%ptr
@@ -513,7 +514,7 @@ contains
                 if (dep%output_file .in. link_objects) cycle
 
                 ! Add dependency object file to link object list
-                temp_str%s = dep%output_file
+                temp_str = dep%output_file
                 link_objects = [link_objects, temp_str]
 
                 ! For executable objects, also need to include non-library 

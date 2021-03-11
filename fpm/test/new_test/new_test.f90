@@ -2,6 +2,7 @@ program new_test
 use,intrinsic :: iso_fortran_env, only : stdin=>input_unit, stdout=>output_unit, stderr=>error_unit
 use fpm_filesystem,  only : is_dir, list_files, exists, windows_path, join_path, &
   dirname
+use stdlib_string_type, string_t => string_type
 use fpm_strings,     only : string_t, operator(.in.)
 use fpm_environment, only : run, get_os_type
 use fpm_environment, only : OS_UNKNOWN, OS_LINUX, OS_MACOS, OS_CYGWIN, OS_SOLARIS, OS_FREEBSD, OS_WINDOWS
@@ -124,7 +125,7 @@ logical                       :: IS_OS_WINDOWS
          if(size(expected).ne.size(file_names))then
             write(*,*)'WARNING: unexpected number of files in file list=',size(file_names),' expected ',size(expected)
             write(*,'("EXPECTED: ",*(g0:,","))')(scr//trim(expected(j)),j=1,size(expected))
-            write(*,'("FOUND:    ",*(g0:,","))')(trim(file_names(j)%s),j=1,size(file_names))
+            write(*,'("FOUND:    ",*(dt:,","))')(trim(file_names(j)),j=1,size(file_names))
          endif
 
          do j=1,size(expected)
@@ -133,7 +134,7 @@ logical                       :: IS_OS_WINDOWS
             if(is_os_windows) expected(j)=windows_path(expected(j))
             if( .not.(trim(expected(j)).in.file_names) )then
                 tally=[tally,.false.]
-                write(*,'("ERROR: FOUND ",*(g0:,", "))')( trim(file_names(k)%s), k=1,size(file_names) )
+                write(*,'("ERROR: FOUND ",*(dt:,", "))')( trim(file_names(k)), k=1,size(file_names) )
                 write(*,'(*(g0))')'       BUT NO MATCH FOR ',expected(j)
                 tally=[tally,.false.]
                 cycle TESTS

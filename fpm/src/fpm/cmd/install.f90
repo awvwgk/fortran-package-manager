@@ -1,5 +1,6 @@
 module fpm_cmd_install
   use, intrinsic :: iso_fortran_env, only : output_unit
+  use stdlib_string_type, string_t => string_type
   use fpm, only : build_model
   use fpm_backend, only : build_package
   use fpm_command_line, only : fpm_install_settings
@@ -94,20 +95,20 @@ contains
       ntargets = ntargets + 1
       lib = join_path(model%output_directory, model%package_name, &
         "lib"//model%package_name//".a")
-      install_target(ntargets)%s = lib
+      install_target(ntargets) = lib
     end if
     do ii = 1, size(targets)
       if (is_executable_target(targets(ii)%ptr)) then
         if (ntargets >= size(install_target)) call resize(install_target)
         ntargets = ntargets + 1
-        install_target(ntargets)%s = targets(ii)%ptr%output_file
+        install_target(ntargets) = targets(ii)%ptr%output_file
       end if
     end do
 
     write(unit, '("#", *(1x, g0))') &
       "total number of installable targets:", ntargets
     do ii = 1, ntargets
-      write(unit, '("-", *(1x, g0))') install_target(ii)%s
+      write(unit, '("-", *(1x, dt))') install_target(ii)
     end do
 
   end subroutine install_info
@@ -122,8 +123,8 @@ contains
     call list_files(dir, modules, recurse=.false.)
 
     do ii = 1, size(modules)
-      if (is_module_file(modules(ii)%s)) then
-        call installer%install_header(modules(ii)%s, error)
+      if (is_module_file(modules(ii))) then
+        call installer%install_header(char(modules(ii)), error)
         if (allocated(error)) exit
       end if
     end do
@@ -158,11 +159,11 @@ contains
   end function is_executable_target
 
   elemental function is_module_file(name) result(is_mod)
-    character(len=*), intent(in) :: name
+    type(string_t), intent(in) :: name
     logical :: is_mod
     integer :: ll
     ll = len(name)
-    is_mod = name(max(1, ll-3):ll) == ".mod"
+    is_mod = char(name, max(1, ll-3), ll) == ".mod"
   end function is_module_file
 
   subroutine handle_error(error)

@@ -2,6 +2,7 @@
 !!
 module fpm_filesystem
 use,intrinsic :: iso_fortran_env, only : stdin=>input_unit, stdout=>output_unit, stderr=>error_unit
+    use stdlib_string_type, string_t => string_type
     use fpm_environment, only: get_os_type, &
                                OS_UNKNOWN, OS_LINUX, OS_MACOS, OS_WINDOWS, &
                                OS_CYGWIN, OS_SOLARIS, OS_FREEBSD
@@ -13,6 +14,16 @@ use,intrinsic :: iso_fortran_env, only : stdin=>input_unit, stdout=>output_unit,
     public :: fileopen, fileclose, filewrite, warnwrite
 
     integer, parameter :: LINE_BUFFER_LEN = 1000
+
+    interface is_dir
+        module procedure :: is_dir_str
+        module procedure :: is_dir_char
+    end interface
+
+    interface exists
+        module procedure :: exists_str
+        module procedure :: exists_char
+    end interface exists
 
 contains
 
@@ -154,8 +165,14 @@ function dirname(path) result (dir)
 end function dirname
 
 
+logical function is_dir_str(dir)
+    type(string_t), intent(in) :: dir
+    is_dir_str = is_dir(char(dir))
+end function is_dir_str
+
+
 !> test if a name matches an existing directory path
-logical function is_dir(dir)
+logical function is_dir_char(dir)
     character(*), intent(in) :: dir
     integer :: stat
 
@@ -169,9 +186,9 @@ logical function is_dir(dir)
 
     end select
 
-    is_dir = (stat == 0)
+    is_dir_char = (stat == 0)
 
-end function is_dir
+end function is_dir_char
 
 
 !> Construct path by joining strings with os file separator
@@ -234,12 +251,10 @@ function read_lines(fh) result(lines)
     type(string_t), allocatable :: lines(:)
 
     integer :: i
-    character(LINE_BUFFER_LEN) :: line_buffer
 
     allocate(lines(number_of_rows(fh)))
     do i = 1, size(lines)
-        read(fh, '(A)') line_buffer
-        lines(i)%s = trim(line_buffer)
+        read(fh, *) lines(i)
     end do
 
 end function read_lines
@@ -309,7 +324,7 @@ recursive subroutine list_files(dir, files, recurse)
     close(fh,status="delete")
 
     do i=1,size(files)
-        files(i)%s = join_path(dir,files(i)%s)
+        files(i) = join_path(dir,char(files(i)))
     end do
 
     if (present(recurse)) then
@@ -318,9 +333,9 @@ recursive subroutine list_files(dir, files, recurse)
             allocate(sub_dir_files(0))
 
             do i=1,size(files)
-                if (is_dir(files(i)%s)) then
+                if (is_dir(files(i))) then
 
-                    call list_files(files(i)%s, dir_files, recurse=.true.)
+                    call list_files(char(files(i)), dir_files, recurse=.true.)
                     sub_dir_files = [sub_dir_files, dir_files]
 
                 end if
@@ -335,9 +350,14 @@ end subroutine list_files
 
 
 !> test if pathname already exists
-logical function exists(filename) result(r)
+logical function exists_char(filename) result(r)
     character(len=*), intent(in) :: filename
     inquire(file=filename, exist=r)
+end function
+
+logical function exists_str(filename) result(r)
+    type(string_t), intent(in) :: filename
+    r = exists(char(filename))
 end function
 
 

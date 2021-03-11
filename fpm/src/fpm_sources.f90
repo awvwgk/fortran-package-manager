@@ -4,10 +4,11 @@
 !> `[[srcfile_t]]` objects by looking for source files in the filesystem. 
 !>
 module fpm_sources
+use stdlib_string_type, string_t => string_type
 use fpm_error, only: error_t
 use fpm_model, only: srcfile_t, FPM_UNIT_PROGRAM
 use fpm_filesystem, only: basename, canon_path, dirname, join_path, list_files
-use fpm_strings, only: lower, str_ends_with, string_t, operator(.in.)
+use fpm_strings, only: lower, str_ends_with, operator(.in.)
 use fpm_source_parsing, only: parse_f_source, parse_c_source
 use fpm_manifest_executable, only: executable_config_t
 implicit none
@@ -75,15 +76,15 @@ subroutine add_sources_from_dir(sources,directory,scope,with_executables,recurse
     if (allocated(sources)) then
         allocate(existing_src_files(size(sources)))
         do i=1,size(sources)
-            existing_src_files(i)%s = canon_path(sources(i)%file_name)
+            existing_src_files(i) = canon_path(sources(i)%file_name)
         end do
     else
         allocate(existing_src_files(0))
     end if
 
-    is_source = [(.not.(canon_path(file_names(i)%s) .in. existing_src_files) .and. &
-                  (str_ends_with(lower(file_names(i)%s), fortran_suffixes) .or. &
-                   str_ends_with(lower(file_names(i)%s),[".c",".h"]) ),i=1,size(file_names))]
+    is_source = [(.not.(canon_path(char(file_names(i))) .in. existing_src_files) .and. &
+                  (str_ends_with(lower(char(file_names(i))), fortran_suffixes) .or. &
+                   str_ends_with(lower(char(file_names(i))),[".c",".h"]) ),i=1,size(file_names))]
     src_file_names = pack(file_names,is_source)
 
     allocate(dir_sources(size(src_file_names)))
@@ -91,7 +92,7 @@ subroutine add_sources_from_dir(sources,directory,scope,with_executables,recurse
 
     do i = 1, size(src_file_names)
 
-        dir_sources(i) = parse_source(src_file_names(i)%s,error)
+        dir_sources(i) = parse_source(char(src_file_names(i)),error)
         if (allocated(error)) return
 
         dir_sources(i)%unit_scope = scope
@@ -141,7 +142,7 @@ subroutine add_executable_sources(sources,executables,scope,auto_discover,error)
     call get_executable_source_dirs(exe_dirs,executables)
 
     do i=1,size(exe_dirs)
-        call add_sources_from_dir(sources,exe_dirs(i)%s, scope, &
+        call add_sources_from_dir(sources,char(exe_dirs(i)), scope, &
                      with_executables=auto_discover, recurse=.false., error=error)
 
         if (allocated(error)) then
@@ -195,16 +196,17 @@ subroutine get_executable_source_dirs(exe_dirs,executables)
     type(string_t), allocatable, intent(inout) :: exe_dirs(:)
     class(executable_config_t), intent(in) :: executables(:)
 
-    type(string_t) :: dirs_temp(size(executables))
+    type(string_t), allocatable :: dirs_temp(:)
 
     integer :: i, n
+    allocate(dirs_temp(size(executables)))
 
     n = 0
     do i=1,size(executables)
         if (.not.(executables(i)%source_dir .in. dirs_temp)) then
 
             n = n + 1
-            dirs_temp(n)%s = executables(i)%source_dir
+            dirs_temp(n) = executables(i)%source_dir
 
         end if
     end do

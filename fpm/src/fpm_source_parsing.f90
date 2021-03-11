@@ -15,8 +15,9 @@
 !> - `[[parse_c_source]]`
 !>
 module fpm_source_parsing
+use stdlib_string_type, string_t => string_type
 use fpm_error, only: error_t, file_parse_error, fatal_error
-use fpm_strings, only: string_t, string_cat, len_trim, split, lower, str_ends_with, fnv_1a
+use fpm_strings, only: string_cat, len_trim, split, lower, str_ends_with, fnv_1a
 use fpm_model, only: srcfile_t, &
                     FPM_UNIT_UNKNOWN, FPM_UNIT_PROGRAM, FPM_UNIT_MODULE, &
                     FPM_UNIT_SUBMODULE, FPM_UNIT_SUBPROGRAM, &
@@ -99,27 +100,27 @@ function parse_f_source(f_filename,error) result(f_source)
 
             ! Skip lines that are continued: not statements
             if (i > 1) then
-                ic = index(file_lines(i-1)%s,'!')
+                ic = index(file_lines(i-1),'!')
                 if (ic < 1) then
-                    ic = len(file_lines(i-1)%s)
+                    ic = len(file_lines(i-1))
                 end if
-                temp_string = trim(file_lines(i-1)%s(1:ic))
+                temp_string = trim(char(file_lines(i-1), 1, ic))
                 if (len(temp_string) > 0 .and. index(temp_string,'&') == len(temp_string)) then
                     cycle
                 end if
             end if
 
             ! Process 'USE' statements
-            if (index(adjustl(lower(file_lines(i)%s)),'use ') == 1 .or. &
-                index(adjustl(lower(file_lines(i)%s)),'use::') == 1) then
+            if (index(adjustl(lower(char(file_lines(i)))),'use ') == 1 .or. &
+                index(adjustl(lower(char(file_lines(i)))),'use::') == 1) then
 
-                if (index(file_lines(i)%s,'::') > 0) then
+                if (index(file_lines(i),'::') > 0) then
 
-                    temp_string = split_n(file_lines(i)%s,delims=':',n=2,stat=stat)
+                    temp_string = split_n(char(file_lines(i)),delims=':',n=2,stat=stat)
                     if (stat /= 0) then
                         call file_parse_error(error,f_filename, &
                                 'unable to find used module name',i, &
-                                file_lines(i)%s,index(file_lines(i)%s,'::'))
+                                char(file_lines(i)),index(file_lines(i),'::'))
                         return
                     end if
 
@@ -127,18 +128,18 @@ function parse_f_source(f_filename,error) result(f_source)
                     if (stat /= 0) then
                         call file_parse_error(error,f_filename, &
                                  'unable to find used module name',i, &
-                                 file_lines(i)%s)
+                                 char(file_lines(i)))
                         return
                     end if
                     mod_name = lower(mod_name)
 
                 else
 
-                    mod_name = split_n(file_lines(i)%s,n=2,delims=' ,',stat=stat)
+                    mod_name = split_n(char(file_lines(i)),n=2,delims=' ,',stat=stat)
                     if (stat /= 0) then
                         call file_parse_error(error,f_filename, &
                                 'unable to find used module name',i, &
-                                file_lines(i)%s)
+                                char(file_lines(i)))
                         return
                     end if
                     mod_name = lower(mod_name)
@@ -158,29 +159,29 @@ function parse_f_source(f_filename,error) result(f_source)
 
                 if (pass == 2) then
 
-                    f_source%modules_used(n_use)%s = mod_name
+                    f_source%modules_used(n_use) = mod_name
 
                 end if
 
             end if
 
             ! Process 'INCLUDE' statements
-            ic = index(adjustl(lower(file_lines(i)%s)),'include')
+            ic = index(adjustl(lower(char(file_lines(i)))),'include')
             if ( ic == 1 ) then
-                ic = index(lower(file_lines(i)%s),'include')
-                if (index(adjustl(file_lines(i)%s(ic+7:)),'"') == 1 .or. &
-                    index(adjustl(file_lines(i)%s(ic+7:)),"'") == 1 ) then
+                ic = index(lower(char(file_lines(i))),'include')
+                if (index(adjustl(char(file_lines(i), ic+7, len(file_lines(i)))),'"') == 1 .or. &
+                    index(adjustl(char(file_lines(i), ic+7, len(file_lines(i)))),"'") == 1 ) then
 
 
                     n_include = n_include + 1
 
                     if (pass == 2) then
-                        f_source%include_dependencies(n_include)%s = &
-                         & split_n(file_lines(i)%s,n=2,delims="'"//'"',stat=stat)
+                        f_source%include_dependencies(n_include) = &
+                         & split_n(char(file_lines(i)),n=2,delims="'"//'"',stat=stat)
                         if (stat /= 0) then
                             call file_parse_error(error,f_filename, &
                                   'unable to find include file name',i, &
-                                  file_lines(i)%s)
+                                  char(file_lines(i)))
                             return
                         end if
                     end if
@@ -188,13 +189,13 @@ function parse_f_source(f_filename,error) result(f_source)
             end if
 
             ! Extract name of module if is module
-            if (index(adjustl(lower(file_lines(i)%s)),'module ') == 1) then
+            if (index(adjustl(lower(char(file_lines(i)))),'module ') == 1) then
 
-                mod_name = lower(split_n(file_lines(i)%s,n=2,delims=' ',stat=stat))
+                mod_name = lower(split_n(char(file_lines(i)),n=2,delims=' ',stat=stat))
                 if (stat /= 0) then
                     call file_parse_error(error,f_filename, &
                           'unable to find module name',i, &
-                          file_lines(i)%s)
+                          char(file_lines(i)))
                     return
                 end if
 
@@ -214,7 +215,7 @@ function parse_f_source(f_filename,error) result(f_source)
                 if (.not.validate_name(mod_name)) then
                     call file_parse_error(error,f_filename, &
                           'empty or invalid name for module',i, &
-                          file_lines(i)%s, index(file_lines(i)%s,mod_name))
+                          char(file_lines(i)), index(file_lines(i),mod_name))
                     return
                 end if
 
@@ -229,29 +230,29 @@ function parse_f_source(f_filename,error) result(f_source)
             end if
 
             ! Extract name of submodule if is submodule
-            if (index(adjustl(lower(file_lines(i)%s)),'submodule') == 1) then
+            if (index(adjustl(lower(char(file_lines(i)))),'submodule') == 1) then
 
-                mod_name = split_n(file_lines(i)%s,n=3,delims='()',stat=stat)
+                mod_name = split_n(char(file_lines(i)),n=3,delims='()',stat=stat)
                 if (stat /= 0) then
                     call file_parse_error(error,f_filename, &
                           'unable to get submodule name',i, &
-                          file_lines(i)%s)
+                          char(file_lines(i)))
                     return
                 end if
                 if (.not.validate_name(mod_name)) then
                     call file_parse_error(error,f_filename, &
                           'empty or invalid name for submodule',i, &
-                          file_lines(i)%s, index(file_lines(i)%s,mod_name))
+                          char(file_lines(i)), index(file_lines(i),mod_name))
                     return
                 end if
 
                 n_mod = n_mod + 1
 
-                temp_string = split_n(file_lines(i)%s,n=2,delims='()',stat=stat)
+                temp_string = split_n(char(file_lines(i)),n=2,delims='()',stat=stat)
                 if (stat /= 0) then
                     call file_parse_error(error,f_filename, &
                           'unable to get submodule ancestry',i, &
-                          file_lines(i)%s)
+                          char(file_lines(i)))
                     return
                 end if
 
@@ -270,13 +271,13 @@ function parse_f_source(f_filename,error) result(f_source)
                     if (.not.validate_name(temp_string)) then
                         call file_parse_error(error,f_filename, &
                           'empty or invalid name for submodule parent',i, &
-                          file_lines(i)%s, index(file_lines(i)%s,temp_string))
+                          char(file_lines(i)), index(file_lines(i),temp_string))
                         return
                     end if
 
-                    f_source%modules_used(n_use)%s = lower(temp_string)
+                    f_source%modules_used(n_use) = lower(temp_string)
 
-                    f_source%modules_provided(n_mod)%s = lower(mod_name)
+                    f_source%modules_provided(n_mod) = lower(mod_name)
 
                 end if
 
@@ -284,9 +285,9 @@ function parse_f_source(f_filename,error) result(f_source)
 
             ! Detect if contains a program
             !  (no modules allowed after program def)
-            if (index(adjustl(lower(file_lines(i)%s)),'program ') == 1) then
+            if (index(adjustl(lower(char(file_lines(i)))),'program ') == 1) then
 
-                temp_string = lower(split_n(file_lines(i)%s,n=2,delims=' ',stat=stat))
+                temp_string = lower(split_n(char(file_lines(i)),n=2,delims=' ',stat=stat))
                 if (stat == 0) then
 
                     if (scan(temp_string,'=(')>0 ) then
@@ -404,19 +405,19 @@ function parse_c_source(c_filename,error) result(c_source)
         file_loop: do i=1,size(file_lines)
 
             ! Process 'INCLUDE' statements
-            if (index(adjustl(lower(file_lines(i)%s)),'#include') == 1 .and. &
-                index(file_lines(i)%s,'"') > 0) then
+            if (index(adjustl(lower(char(file_lines(i)))),'#include') == 1 .and. &
+                index(file_lines(i),'"') > 0) then
 
                 n_include = n_include + 1
 
                 if (pass == 2) then
 
-                    c_source%include_dependencies(n_include)%s = &
-                     &   split_n(file_lines(i)%s,n=2,delims='"',stat=stat)
+                    c_source%include_dependencies(n_include) = &
+                     &   split_n(char(file_lines(i)),n=2,delims='"',stat=stat)
                     if (stat /= 0) then
                         call file_parse_error(error,c_filename, &
                             'unable to get c include file',i, &
-                            file_lines(i)%s,index(file_lines(i)%s,'"'))
+                            char(file_lines(i)),index(file_lines(i),'"'))
                         return
                     end if
 

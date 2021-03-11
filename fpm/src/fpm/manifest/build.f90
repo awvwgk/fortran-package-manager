@@ -10,8 +10,8 @@
 !>link = ["lib"]
 !>```
 module fpm_manifest_build
+    use stdlib_string_type, only : string_t => string_type, char
     use fpm_error, only : error_t, syntax_error, fatal_error
-    use fpm_strings, only : string_t
     use fpm_toml, only : toml_table, toml_key, toml_stat, get_value
     implicit none
     private
@@ -153,7 +153,7 @@ contains
         if (allocated(self%link)) then
             write(unit, fmt) " - link against"
             do ilink = 1, size(self%link)
-                write(unit, fmt) "   - " // self%link(ilink)%s
+                write(unit, fmt) "   - " // char(self%link(ilink))
             end do
         end if
 

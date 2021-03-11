@@ -6,6 +6,10 @@ maintainer = ""
 copyright = "2020 fpm contributors"
 
 [dependencies]
+[dependencies.stdlib]
+git = "https://github.com/lkedward/stdlib-fpm.git"
+rev = "eadc8ad5eaf182adee04f1bd31624ad19b9eaf2c"
+
 [dependencies.toml-f]
 git = "https://github.com/toml-f/toml-f"
 rev = "2f5eaba864ff630ba0c3791126a3f811b6e437f3"

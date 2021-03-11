@@ -1,6 +1,7 @@
 !> Define tests for the `fpm_sources` module (parsing routines)
 module test_source_parsing
     use testsuite, only : new_unittest, unittest_t, error_t, test_failed
+    use stdlib_string_type, only : write(formatted)
     use fpm_filesystem, only: get_temp_filename
     use fpm_source_parsing, only: parse_f_source, parse_c_source
     use fpm_model, only: srcfile_t, FPM_UNIT_PROGRAM, FPM_UNIT_MODULE, &
@@ -721,7 +722,7 @@ contains
             return
         end if
 
-        write(*,*) '"',f_source%modules_used(1)%s,'"'
+        write(*,*) '"',f_source%modules_used(1),'"'
 
     end subroutine test_invalid_module
 
@@ -749,7 +750,7 @@ contains
             return
         end if
 
-        write(*,*) '"',f_source%modules_used(1)%s,'"'
+        write(*,*) '"',f_source%modules_used(1),'"'
 
     end subroutine test_invalid_submodule
 

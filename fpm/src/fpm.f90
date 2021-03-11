@@ -1,5 +1,6 @@
 module fpm
-use fpm_strings, only: string_t, operator(.in.), glob, join
+use stdlib_string_type, string_t => string_type
+use fpm_strings, only: operator(.in.), glob, join
 use fpm_backend, only: build_package
 use fpm_command_line, only: fpm_build_settings, fpm_new_settings, &
                       fpm_run_settings, fpm_install_settings, fpm_test_settings
@@ -257,7 +258,7 @@ subroutine cmd_run(settings,test)
 
                 if (size(settings%name) == 0) then
 
-                    exe_cmd%s = exe_target%output_file
+                    exe_cmd = exe_target%output_file
                     executables = [executables, exe_cmd]
 
                 else
@@ -267,7 +268,7 @@ subroutine cmd_run(settings,test)
                         if (glob(trim(exe_source%exe_name),trim(settings%name(j)))) then
 
                             found(j) = .true.
-                            exe_cmd%s = exe_target%output_file
+                            exe_cmd = exe_target%output_file
                             executables = [executables, exe_cmd]
 
                         end if
@@ -332,14 +333,14 @@ subroutine cmd_run(settings,test)
     else
 
         do i=1,size(executables)
-            if (exists(executables(i)%s)) then
+            if (exists(executables(i))) then
                 if(settings%runner .ne. ' ')then
-                    call run(settings%runner//' '//executables(i)%s//" "//settings%args,echo=settings%verbose)
+                    call run(settings%runner//' '//executables(i)//" "//settings%args,echo=settings%verbose)
                 else
-                    call run(executables(i)%s//" "//settings%args,echo=settings%verbose)
+                    call run(executables(i)//" "//settings%args,echo=settings%verbose)
                 endif
             else
-                write(stderr,*)'fpm::run<ERROR>',executables(i)%s,' not found'
+                write(stderr,*)'fpm::run<ERROR>',executables(i),' not found'
                 stop 1
             end if
         end do
@@ -380,7 +381,7 @@ subroutine cmd_run(settings,test)
         write(stderr,*) 'Matched names:'
         do i=1,size(executables)
             write(stderr,'(A)',advance=(merge("yes","no ",modulo(j,nCol)==0))) &
-             & [character(len=col_width) :: basename(executables(i)%s)]
+             & [character(len=col_width) :: basename(char(executables(i)))]
             j = j + 1
         enddo
         write(stderr,*)
