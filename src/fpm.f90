@@ -4,12 +4,13 @@ use fpm_backend, only: build_package
 use fpm_command_line, only: fpm_build_settings, fpm_new_settings, &
                       fpm_run_settings, fpm_install_settings, fpm_test_settings
 use fpm_dependency, only : new_dependency_tree
-use fpm_environment, only: run, get_env, get_archiver
+use fpm_environment, only: run, get_env
 use fpm_filesystem, only: is_dir, join_path, number_of_rows, list_files, exists, basename
 use fpm_model, only: fpm_model_t, srcfile_t, show_model, &
                     FPM_SCOPE_UNKNOWN, FPM_SCOPE_LIB, FPM_SCOPE_DEP, &
                     FPM_SCOPE_APP, FPM_SCOPE_EXAMPLE, FPM_SCOPE_TEST
-use fpm_compiler, only: get_module_flags, is_unknown_compiler, get_default_c_compiler
+use fpm_compiler, only: get_module_flags, is_unknown_compiler, get_default_c_compiler, &
+                        get_archiver
 
 
 use fpm_sources, only: add_executable_sources, add_sources_from_dir
@@ -17,7 +18,7 @@ use fpm_targets, only: targets_from_sources, resolve_module_dependencies, &
                         resolve_target_linking, build_target_t, build_target_ptr, &
                         FPM_TARGET_EXECUTABLE, FPM_TARGET_ARCHIVE
 use fpm_manifest, only : get_package_data, package_config_t
-use fpm_error, only : error_t, fatal_error
+use fpm_error, only : error_t, fatal_error, fpm_stop
 use fpm_manifest_test, only : test_config_t
 use,intrinsic :: iso_fortran_env, only : stdin=>input_unit,   &
                                        & stdout=>output_unit, &
@@ -195,7 +196,7 @@ subroutine build_model(model, settings, package, error)
     ! Check for duplicate modules
     call check_modules_for_duplicates(model, duplicates_found)
     if (duplicates_found) then
-      error stop 'Error: One or more duplicate module names found.'
+        call fpm_stop(1,'*build_model*:Error: One or more duplicate module names found.')
     end if
 end subroutine build_model
 
@@ -254,20 +255,17 @@ integer :: i
 
 call get_package_data(package, "fpm.toml", error, apply_defaults=.true.)
 if (allocated(error)) then
-    print '(a)', error%message
-    error stop 1
+    call fpm_stop(1,'*cmd_build*:package error:'//error%message)
 end if
 
 call build_model(model, settings, package, error)
 if (allocated(error)) then
-    print '(a)', error%message
-    error stop 1
+    call fpm_stop(1,'*cmd_build*:model error:'//error%message)
 end if
 
 call targets_from_sources(targets,model,error)
 if (allocated(error)) then
-    print '(a)', error%message
-    error stop 1
+    call fpm_stop(1,'*cmd_build*:target error:'//error%message)
 end if
 
 if(settings%list)then
@@ -297,25 +295,23 @@ subroutine cmd_run(settings,test)
     type(build_target_t), pointer :: exe_target
     type(srcfile_t), pointer :: exe_source
     integer :: run_scope
+    integer, allocatable :: stat(:)
     character(len=:),allocatable :: line
     logical :: toomany
 
     call get_package_data(package, "fpm.toml", error, apply_defaults=.true.)
     if (allocated(error)) then
-        print '(a)', error%message
-        error stop 1
+        call fpm_stop(1, '*cmd_run*:package error:'//error%message)
     end if
 
     call build_model(model, settings%fpm_build_settings, package, error)
     if (allocated(error)) then
-        print '(a)', error%message
-        error stop 1
+        call fpm_stop(1, '*cmd_run*:model error:'//error%message)
     end if
 
     call targets_from_sources(targets,model,error)
     if (allocated(error)) then
-        print '(a)', error%message
-        error stop 1
+        call fpm_stop(1, '*cmd_run*:targets error:'//error%message)
     end if
 
     if (test) then
@@ -371,11 +367,10 @@ subroutine cmd_run(settings,test)
     ! Check if any apps/tests were found
     if (col_width < 0) then
         if (test) then
-            write(stderr,*) 'No tests to run'
+            call fpm_stop(0,'No tests to run')
         else
-            write(stderr,*) 'No executables to run'
+            call fpm_stop(0,'No executables to run')
         end if
-        stop
     end if
 
     ! Check all names are valid
@@ -389,7 +384,7 @@ subroutine cmd_run(settings,test)
         line=join(settings%name)
         if(line.ne.'.')then ! do not report these special strings
            if(any(.not.found))then
-              write(stderr,'(A)',advance="no")'fpm::run<ERROR> specified names '
+              write(stderr,'(A)',advance="no")'<ERROR>*cmd_run*:specified names '
               do j=1,size(settings%name)
                   if (.not.found(j)) write(stderr,'(A)',advance="no") '"'//trim(settings%name(j))//'" '
               end do
@@ -404,9 +399,9 @@ subroutine cmd_run(settings,test)
         call compact_list_all()
 
         if(line.eq.'.' .or. line.eq.' ')then ! do not report these special strings
-           stop
+           call fpm_stop(0,'')
         else
-           stop 1
+           call fpm_stop(1,'')
         endif
 
     end if
@@ -417,18 +412,39 @@ subroutine cmd_run(settings,test)
          call compact_list()
     else
 
+        allocate(stat(size(executables)))
         do i=1,size(executables)
             if (exists(executables(i)%s)) then
                 if(settings%runner .ne. ' ')then
-                    call run(settings%runner//' '//executables(i)%s//" "//settings%args,echo=settings%verbose)
+                    if(.not.allocated(settings%args))then
+                       call run(settings%runner//' '//executables(i)%s, &
+                             echo=settings%verbose, exitstat=stat(i))
+                    else
+                       call run(settings%runner//' '//executables(i)%s//" "//settings%args, &
+                             echo=settings%verbose, exitstat=stat(i))
+                    endif
                 else
-                    call run(executables(i)%s//" "//settings%args,echo=settings%verbose)
+                    if(.not.allocated(settings%args))then
+                       call run(executables(i)%s,echo=settings%verbose, exitstat=stat(i))
+                    else
+                       call run(executables(i)%s//" "//settings%args,echo=settings%verbose, &
+                             exitstat=stat(i))
+                    endif
                 endif
             else
-                write(stderr,*)'fpm::run<ERROR>',executables(i)%s,' not found'
-                stop 1
+                call fpm_stop(1,'*cmd_run*:'//executables(i)%s//' not found')
             end if
         end do
+
+        if (any(stat /= 0)) then
+            do i=1,size(stat)
+                if (stat(i) /= 0) then
+                    write(stderr,'(*(g0:,1x))') '<ERROR> Execution failed for object "',basename(executables(i)%s),'"'
+                end if
+            end do
+            call fpm_stop(1,'*cmd_run*:stopping due to failed executions')
+        end if
+
     endif
     contains
     subroutine compact_list_all()

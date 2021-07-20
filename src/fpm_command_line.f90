@@ -25,11 +25,14 @@
 module fpm_command_line
 use fpm_environment,  only : get_os_type, get_env, &
                              OS_UNKNOWN, OS_LINUX, OS_MACOS, OS_WINDOWS, &
-                             OS_CYGWIN, OS_SOLARIS, OS_FREEBSD
+                             OS_CYGWIN, OS_SOLARIS, OS_FREEBSD, OS_OPENBSD
 use M_CLI2,           only : set_args, lget, sget, unnamed, remaining, specified
-use fpm_strings,      only : lower, split, fnv_1a
-use fpm_filesystem,   only : basename, canon_path, to_fortran_name
-use fpm_compiler, only : get_default_compile_flags
+use M_CLI2,           only : get_subcommand, CLI_RESPONSE_FILE
+use fpm_strings,      only : lower, split, fnv_1a, to_fortran_name, is_fortran_name
+use fpm_filesystem,   only : basename, canon_path, which
+use fpm_environment,  only : run, get_command_arguments_quoted
+use fpm_compiler,     only : get_default_compile_flags
+use fpm_error,        only : fpm_stop
 use,intrinsic :: iso_fortran_env, only : stdin=>input_unit, &
                                        & stdout=>output_unit, &
                                        & stderr=>error_unit
@@ -46,6 +49,7 @@ public :: fpm_cmd_settings, &
           get_command_line_settings
 
 type, abstract :: fpm_cmd_settings
+    character(len=:), allocatable :: working_dir
     logical                      :: verbose=.true.
 end type
 
@@ -119,6 +123,7 @@ contains
         integer                       :: i
         integer                       :: widest
         type(fpm_install_settings), allocatable :: install_settings
+        character(len=:), allocatable :: common_args, working_dir
 
         call set_help()
         ! text for --version switch,
@@ -129,11 +134,12 @@ contains
             case (OS_CYGWIN);  os_type =  "OS Type:     Cygwin"
             case (OS_SOLARIS); os_type =  "OS Type:     Solaris"
             case (OS_FREEBSD); os_type =  "OS Type:     FreeBSD"
+            case (OS_OPENBSD); os_type =  "OS Type:     OpenBSD"
             case (OS_UNKNOWN); os_type =  "OS Type:     Unknown"
             case default     ; os_type =  "OS Type:     UNKNOWN"
         end select
         version_text = [character(len=80) :: &
-         &  'Version:     0.2.0, alpha',                           &
+         &  'Version:     0.3.0, alpha',                               &
          &  'Program:     fpm(1)',                                     &
          &  'Description: A Fortran package manager and build system', &
          &  'Home Page:   https://github.com/fortran-lang/fpm',        &
@@ -141,18 +147,17 @@ contains
          &  os_type]
         ! find the subcommand name by looking for first word on command
         ! not starting with dash
-        cmdarg=' '
-        do i = 1, command_argument_count()
-           call get_command_argument(i, cmdarg)
-           if(adjustl(cmdarg(1:1)) .ne. '-')exit
-        enddo
+        CLI_RESPONSE_FILE=.true.
+        cmdarg = get_subcommand()
+
+        common_args = '--directory:C " " '
 
         ! now set subcommand-specific help text and process commandline
         ! arguments. Then call subcommand routine
         select case(trim(cmdarg))
 
         case('run')
-            call set_args('&
+            call set_args(common_args //'&
             & --target " " &
             & --list F &
             & --all F &
@@ -205,7 +210,7 @@ contains
             & verbose=lget('verbose') )
 
         case('build')
-            call set_args( '&
+            call set_args(common_args // '&
             & --profile " " &
             & --list F &
             & --show-model F &
@@ -227,7 +232,7 @@ contains
             & verbose=lget('verbose') )
 
         case('new')
-            call set_args('&
+            call set_args(common_args // '&
             & --src F &
             & --lib F &
             & --app F &
@@ -240,17 +245,15 @@ contains
             & help_new, version_text)
             select case(size(unnamed))
             case(1)
-                write(stderr,'(*(g0,/))')'<ERROR> directory name required'
                 write(stderr,'(*(7x,g0,/))') &
                 & '<USAGE> fpm new NAME [[--lib|--src] [--app] [--test] [--example]]|[--full|--bare] [--backfill]'
-                stop 1
+                call fpm_stop(1,'directory name required')
             case(2)
                 name=trim(unnamed(2))
             case default
-                write(stderr,'(g0)')'<ERROR> only one directory name allowed'
                 write(stderr,'(7x,g0)') &
                 & '<USAGE> fpm new NAME [[--lib|--src] [--app] [--test] [--example]]| [--full|--bare] [--backfill]'
-                stop 2
+                call fpm_stop(2,'only one directory name allowed')
             end select
             !*! canon_path is not converting ".", etc.
             name=canon_path(name)
@@ -258,7 +261,7 @@ contains
                 write(stderr,'(g0)') [ character(len=72) :: &
                 & '<ERROR> the fpm project name must be made of up to 63 ASCII letters,', &
                 & '        numbers, underscores, or hyphens, and start with a letter.']
-                stop 4
+                call fpm_stop(4,' ')
             endif
 
             allocate(fpm_new_settings :: cmd_settings)
@@ -267,13 +270,13 @@ contains
                 write(stderr,'(*(a))')&
                 &'<ERROR> --full and any of [--src|--lib,--app,--test,--example,--bare]', &
                 &'        are mutually exclusive.'
-                stop 5
+                call fpm_stop(5,' ')
             elseif (any( specified([character(len=10) :: 'src','lib','app','test','example','full'])) &
             & .and.lget('bare') )then
                 write(stderr,'(*(a))')&
                 &'<ERROR> --bare and any of [--src|--lib,--app,--test,--example,--full]', &
                 &'        are mutually exclusive.'
-                stop 3
+                call fpm_stop(3,' ')
             elseif (any( specified([character(len=10) :: 'src','lib','app','test','example']) ) )then
                 cmd_settings=fpm_new_settings(&
                  & backfill=lget('backfill'),               &
@@ -297,7 +300,7 @@ contains
             endif
 
         case('help','manual')
-            call set_args('&
+            call set_args(common_args // '&
             & --verbose F &
             & ',help_help,version_text)
             if(size(unnamed).lt.2)then
@@ -345,7 +348,8 @@ contains
             call printhelp(help_text)
 
         case('install')
-            call set_args('--profile " " --no-rebuild F --verbose F --prefix " " &
+            call set_args(common_args // '&
+                & --profile " " --no-rebuild F --verbose F --prefix " " &
                 & --list F &
                 & --compiler "'//get_env('FPM_COMPILER','gfortran')//'" &
                 & --flag:: " "&
@@ -370,7 +374,7 @@ contains
             call move_alloc(install_settings, cmd_settings)
 
         case('list')
-            call set_args('&
+            call set_args(common_args // '&
             & --list F&
             & --verbose F&
             &', help_list, version_text)
@@ -379,7 +383,7 @@ contains
                call printhelp(help_list_dash)
             endif
         case('test')
-            call set_args('&
+            call set_args(common_args // '&
             & --target " " &
             & --list F&
             & --profile " "&
@@ -424,7 +428,7 @@ contains
             & verbose=lget('verbose') )
 
         case('update')
-            call set_args('--fetch-only F --verbose F --clean F', &
+            call set_args(common_args // ' --fetch-only F --verbose F --clean F', &
                 help_update, version_text)
 
             if( size(unnamed) .gt. 1 )then
@@ -440,27 +444,37 @@ contains
 
         case default
 
-            call set_args('&
-            & --list F&
-            & --verbose F&
-            &', help_fpm, version_text)
-            ! Note: will not get here if --version or --usage or --help
-            ! is present on commandline
-            help_text=help_usage
-            if(lget('list'))then
-               help_text=help_list_dash
-            elseif(len_trim(cmdarg).eq.0)then
-                write(stdout,'(*(a))')'Fortran Package Manager:'
-                write(stdout,'(*(a))')' '
-                call printhelp(help_list_nodash)
+            if(which('fpm-'//cmdarg).ne.'')then
+                call run('fpm-'//trim(cmdarg)//' '// get_command_arguments_quoted(),.false.)
             else
-                write(stderr,'(*(a))')'<ERROR> unknown subcommand [', &
-                 & trim(cmdarg), ']'
-                call printhelp(help_list_dash)
+                call set_args('&
+                & --list F&
+                & --verbose F&
+                &', help_fpm, version_text)
+                ! Note: will not get here if --version or --usage or --help
+                ! is present on commandline
+                help_text=help_usage
+                if(lget('list'))then
+                   help_text=help_list_dash
+                elseif(len_trim(cmdarg).eq.0)then
+                    write(stdout,'(*(a))')'Fortran Package Manager:'
+                    write(stdout,'(*(a))')' '
+                    call printhelp(help_list_nodash)
+                else
+                    write(stderr,'(*(a))')'<ERROR> unknown subcommand [', &
+                     & trim(cmdarg), ']'
+                    call printhelp(help_list_dash)
+                endif
+                call printhelp(help_text)
             endif
-            call printhelp(help_text)
 
         end select
+
+        if (allocated(cmd_settings)) then
+            working_dir = sget("directory")
+            call move_alloc(working_dir, cmd_settings%working_dir)
+        end if
+
     contains
 
     subroutine check_build_vals()
@@ -502,27 +516,6 @@ contains
 
     end subroutine get_command_line_settings
 
-    function is_fortran_name(line) result (lout)
-    ! determine if a string is a valid Fortran name ignoring trailing spaces
-    ! (but not leading spaces)
-    character(len=*),parameter   :: int='0123456789'
-    character(len=*),parameter   :: lower='abcdefghijklmnopqrstuvwxyz'
-    character(len=*),parameter   :: upper='ABCDEFGHIJKLMNOPQRSTUVWXYZ'
-    character(len=*),parameter   :: allowed=upper//lower//int//'_'
-    character(len=*),intent(in)  :: line
-    character(len=:),allocatable :: name
-    logical                      :: lout
-        name=trim(line)
-        if(len(name).ne.0)then
-            lout = .true.                                  &
-             & .and. verify(name(1:1), lower//upper) == 0  &
-             & .and. verify(name,allowed) == 0             &
-             & .and. len(name) <= 63
-        else
-            lout = .false.
-        endif
-    end function is_fortran_name
-
     subroutine set_help()
    help_list_nodash=[character(len=80) :: &
    'USAGE: fpm [ SUBCOMMAND [SUBCOMMAND_OPTIONS] ]|[--list|--help|--version]', &
@@ -544,17 +537,18 @@ contains
    ' ']
    help_list_dash = [character(len=80) :: &
    '                                                                                ', &
-   ' build [--compiler COMPILER_NAME] [--profile PROF] [--flag FFLAGS] [--list]          ', &
+   ' build [--compiler COMPILER_NAME] [--profile PROF] [--flag FFLAGS] [--list]     ', &
    ' help [NAME(s)]                                                                 ', &
    ' new NAME [[--lib|--src] [--app] [--test] [--example]]|                         ', &
    '          [--full|--bare][--backfill]                                           ', &
    ' update [NAME(s)] [--fetch-only] [--clean] [--verbose]                          ', &
    ' list [--list]                                                                  ', &
-   ' run  [[--target] NAME(s) [--example] [--profile PROF] [--flag FFLAGS] [--all]       ', &
+   ' run  [[--target] NAME(s) [--example] [--profile PROF] [--flag FFLAGS] [--all]  ', &
    '      [--runner "CMD"] [--compiler COMPILER_NAME] [--list] [-- ARGS]            ', &
-   ' test [[--target] NAME(s)] [--profile PROF] [--flag FFLAGS] [--runner "CMD"] [--list]', &
-   '      [--compiler COMPILER_NAME] [-- ARGS]                                      ', &
-   ' install [--profile PROF] [--flag FFLAGS] [--no-rebuild] [--prefix PATH] [options]   ', &
+   ' test [[--target] NAME(s)] [--profile PROF] [--flag FFLAGS] [--runner "CMD"]    ', &
+   '      [--list] [--compiler COMPILER_NAME] [-- ARGS]                             ', &
+   ' install [--profile PROF] [--flag FFLAGS] [--no-rebuild] [--prefix PATH]        ', &
+   '         [options]                                                              ', &
    ' ']
     help_usage=[character(len=80) :: &
     '' ]
@@ -654,25 +648,28 @@ contains
     '  + run   Run the local package binaries. defaults to all binaries for ', &
     '          that release.                                                ', &
     '  + test  Run the tests.                                               ', &
-    '  + help  Alternate method for displaying subcommand help.             ', &
+    '  + help  Alternate to the --help switch for displaying help text.     ', &
     '  + list  Display brief descriptions of all subcommands.               ', &
     '  + install Install project                                            ', &
     '                                                                       ', &
     '  Their syntax is                                                      ', &
-    '                                                                       ', &
-    '    build [--profile PROF] [--flag FFLAGS] [--list] [--compiler COMPILER_NAME]', &
-    '    new NAME [[--lib|--src] [--app] [--test] [--example]]|             ', &
-    '             [--full|--bare][--backfill]                               ', &
-    '    update [NAME(s)] [--fetch-only] [--clean]                          ', &
-    '    run [[--target] NAME(s)] [--profile PROF] [--flag FFLAGS] [--list] [--example]', &
-    '        [--all] [--runner "CMD"] [--compiler COMPILER_NAME] [-- ARGS]  ', &
-    '    test [[--target] NAME(s)] [--profile PROF] [--flag FFLAGS] [--list]     ', &
-    '         [--runner "CMD"] [--compiler COMPILER_NAME] [-- ARGS]         ', &
-    '    help [NAME(s)]                                                     ', &
-    '    list [--list]                                                      ', &
-    '    install [--profile PROF] [--flag FFLAGS] [--no-rebuild] [--prefix PATH] [options]', &
-    '                                                                       ', &
-    'SUBCOMMAND OPTIONS                                                     ', &
+    '                                                                                ', &
+    '    build [--profile PROF] [--flag FFLAGS] [--list] [--compiler COMPILER_NAME]  ', &
+    '    new NAME [[--lib|--src] [--app] [--test] [--example]]|                      ', &
+    '             [--full|--bare][--backfill]                                        ', &
+    '    update [NAME(s)] [--fetch-only] [--clean]                                   ', &
+    '    run [[--target] NAME(s)] [--profile PROF] [--flag FFLAGS] [--list] [--all]  ', &
+    '        [--example] [--runner "CMD"] [--compiler COMPILER_NAME] [-- ARGS]       ', &
+    '    test [[--target] NAME(s)] [--profile PROF] [--flag FFLAGS] [--list]         ', &
+    '         [--runner "CMD"] [--compiler COMPILER_NAME] [-- ARGS]                  ', &
+    '    help [NAME(s)]                                                              ', &
+    '    list [--list]                                                               ', &
+    '    install [--profile PROF] [--flag FFLAGS] [--no-rebuild] [--prefix PATH]     ', &
+    '    [options]                                                                   ', &
+    '                                                                                ', &
+    'SUBCOMMAND OPTIONS                                                              ', &
+    ' -C, --directory PATH', &
+    '             Change working directory to PATH before running any command', &
     ' --profile PROF    selects the compilation profile for the build.',&
     '                   Currently available profiles are "release" for',&
     '                   high optimization and "debug" for full debug options.',&
@@ -695,6 +692,37 @@ contains
     '  --verbose  Display additional information when available             ', &
     '  --version  Show version information and exit.                        ', &
     '                                                                       ', &
+    '@file                                                                  ', &
+    '   You may replace the default options for the fpm(1) command from a   ', &
+    '   file if your first options begin with @file. Initial options will   ', &
+    '   then be read from the "response file" "file.rsp" in the current     ', &
+    '   directory.                                                          ', &
+    '                                                                       ', &
+    '   If "file" does not exist or cannot be read, then an error occurs and', &
+    '   the program stops.  Each line of the file is prefixed with "options"', &
+    '   and interpreted as a separate argument. The file itself may not     ', &
+    '   contain @file arguments. That is, it is not processed recursively.  ', &
+    '                                                                       ', &
+    '   For more information on response files see                          ', &
+    '                                                                       ', &
+    '      https://urbanjost.github.io/M_CLI2/set_args.3m_cli2.html         ', &
+    '                                                                       ', &
+    '   The basic functionality described here will remain the same, but    ', &
+    '   other features described at the above reference may change.         ', &
+    '                                                                       ', &
+    '   An example file:                                                    ', &
+    '                                                                       ', &
+    '     # my build options                                                ', &
+    '     options build                                                     ', &
+    '     options --compiler gfortran                                       ', &
+    '     options --flag "-pg -static -pthread -Wunreachable-code -Wunused \', &
+    '      -Wuninitialized -g -O -fbacktrace -fdump-core -fno-underscoring \', &
+    '      -frecord-marker=4 -L/usr/X11R6/lib -L/usr/X11R6/lib64 -lX11"     ', &
+    '                                                                       ', &
+    '   Note --flag would have to be on one line as response files do not   ', &
+    '   (currently) allow for continued lines or multiple specifications of ', &
+    '   the same option.                                                    ', &
+    '                                                                       ', &
     'EXAMPLES                                                               ', &
     '   sample commands:                                                    ', &
     '                                                                       ', &
@@ -704,11 +732,11 @@ contains
     '    fpm run                                                            ', &
     '    fpm run --example                                                  ', &
     '    fpm new --help                                                     ', &
-    '    fpm run myprogram --profile release -- -x 10 -y 20 --title "my title"', &
-    '    fpm install --prefix ~/.local                                      ', &
-    '                                                                       ', &
-    'SEE ALSO                                                               ', &
-    '                                                                       ', &
+    '    fpm run myprogram --profile release -- -x 10 -y 20 --title "my title"       ', &
+    '    fpm install --prefix ~/.local                                               ', &
+    '                                                                                ', &
+    'SEE ALSO                                                                        ', &
+    '                                                                                ', &
     ' + The fpm(1) home page is at https://github.com/fortran-lang/fpm               ', &
     ' + Registered fpm(1) packages are at https://fortran-lang.org/packages          ', &
     ' + The fpm(1) TOML file format is described at                                  ', &

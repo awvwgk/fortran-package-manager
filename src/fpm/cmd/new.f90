@@ -55,9 +55,10 @@ module fpm_cmd_new
 
 use fpm_command_line, only : fpm_new_settings
 use fpm_environment, only : run, OS_LINUX, OS_MACOS, OS_WINDOWS
-use fpm_filesystem, only : join_path, exists, basename, mkdir, is_dir, to_fortran_name
+use fpm_filesystem, only : join_path, exists, basename, mkdir, is_dir
 use fpm_filesystem, only : fileopen, fileclose, filewrite, warnwrite
-use fpm_strings, only : join
+use fpm_strings, only : join, to_fortran_name
+use fpm_error, only : fpm_stop
 use,intrinsic :: iso_fortran_env, only : stderr=>error_unit
 implicit none
 private
@@ -347,7 +348,7 @@ character(len=:,kind=tfc),allocatable :: littlefile(:)
         &'  # git repository.                                                             ',&
         &'  #                                                                             ',&
         &'  # You can be specific about which version of a dependency you would           ',&
-        &'  # like. By default the latest master master branch is used. You can           ',&
+        &'  # like. By default the latest default branch is used. You can           ',&
         &'  # optionally specify a branch, a tag or a commit value.                       ',&
         &'  #                                                                             ',&
         &'  # So here are several alternates for specifying a remote dependency (you      ',&
@@ -605,8 +606,8 @@ character(len=*),intent(in) :: filename
     call set_value(table, "copyright",  'Copyright '//date(1:4)//', Jane Doe')
     ! continue building of manifest
     ! ...
-    call new_package(package, table, error)
-    if (allocated(error)) stop 3
+    call new_package(package, table, error=error)
+    if (allocated(error)) call fpm_stop( 3,'')
     if(settings%verbose)then
        call table%accept(ser)
     endif

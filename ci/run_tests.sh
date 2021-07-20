@@ -13,11 +13,10 @@ fi
 pushd example_packages/
 rm -rf ./*/build
 
-pushd hello_world
-"$fpm" build
-"$fpm" run --target hello_world
-"$fpm" run
-popd
+dir=hello_world
+"$fpm" -C $dir build
+"$fpm" -C $dir run --target hello_world
+"$fpm" -C $dir/app run
 
 pushd hello_fpm
 "$fpm" build
@@ -61,6 +60,11 @@ pushd auto_discovery_off
 "$fpm" test --target my_test
 test ! -x ./build/gfortran_*/app/unused
 test ! -x ./build/gfortran_*/test/unused_test
+popd
+
+pushd version_file
+"$fpm" build
+"$fpm" run
 popd
 
 pushd with_c

@@ -1,18 +1,22 @@
 !> This module contains general routines for interacting with the file system
 !!
 module fpm_filesystem
-use,intrinsic :: iso_fortran_env, only : stdin=>input_unit, stdout=>output_unit, stderr=>error_unit
+    use,intrinsic :: iso_fortran_env, only : stdin=>input_unit, stdout=>output_unit, stderr=>error_unit
     use fpm_environment, only: get_os_type, &
                                OS_UNKNOWN, OS_LINUX, OS_MACOS, OS_WINDOWS, &
-                               OS_CYGWIN, OS_SOLARIS, OS_FREEBSD
+                               OS_CYGWIN, OS_SOLARIS, OS_FREEBSD, OS_OPENBSD
+    use fpm_environment, only: separator, get_env
     use fpm_strings, only: f_string, replace, string_t, split
+    use fpm_error, only : fpm_stop
     implicit none
     private
     public :: basename, canon_path, dirname, is_dir, join_path, number_of_rows, read_lines, list_files, env_variable, &
-            mkdir, exists, get_temp_filename, windows_path, unix_path, getline, delete_file, to_fortran_name
-    public :: fileopen, fileclose, filewrite, warnwrite
+            mkdir, exists, get_temp_filename, windows_path, unix_path, getline, delete_file
+    public :: fileopen, fileclose, filewrite, warnwrite, parent_dir
+    public :: which
 
     integer, parameter :: LINE_BUFFER_LEN = 1000
+
 
 contains
 
@@ -41,7 +45,7 @@ end subroutine env_variable
 
 !> Extract filename from path with/without suffix
 function basename(path,suffix) result (base)
- 
+
     character(*), intent(In) :: path
     logical, intent(in), optional :: suffix
     character(:), allocatable :: base
@@ -86,7 +90,7 @@ function canon_path(path)
     character(len=:), allocatable :: canon_path
     character(len=:), allocatable :: nixpath
 
-    integer :: ii, istart, iend, stat, nn, last
+    integer :: istart, iend, nn, last
     logical :: is_path, absolute
 
     nixpath = unix_path(path)
@@ -137,7 +141,7 @@ contains
         logical, intent(inout) :: is_path
 
         integer :: ii, nn
-        character :: tok, last
+        character :: tok
 
         nn = len(string)
 
@@ -181,8 +185,18 @@ function dirname(path) result (dir)
     character(:), allocatable :: dir
 
     dir = path(1:scan(path,'/\',back=.true.))
+    if (len_trim(dir) == 0) dir = "."
 
 end function dirname
+
+!> Extract dirname from path
+function parent_dir(path) result (dir)
+    character(*), intent(in) :: path
+    character(:), allocatable :: dir
+
+    dir = path(1:scan(path,'/\',back=.true.)-1)
+
+end function parent_dir
 
 
 !> test if a name matches an existing directory path
@@ -192,7 +206,7 @@ logical function is_dir(dir)
 
     select case (get_os_type())
 
-    case (OS_UNKNOWN, OS_LINUX, OS_MACOS, OS_CYGWIN, OS_SOLARIS, OS_FREEBSD)
+    case (OS_UNKNOWN, OS_LINUX, OS_MACOS, OS_CYGWIN, OS_SOLARIS, OS_FREEBSD, OS_OPENBSD)
         call execute_command_line("test -d " // dir , exitstat=stat)
 
     case (OS_WINDOWS)
@@ -214,7 +228,7 @@ function join_path(a1,a2,a3,a4,a5) result(path)
     character(len=1)                       :: filesep
 
     select case (get_os_type())
-        case (OS_UNKNOWN, OS_LINUX, OS_MACOS, OS_CYGWIN, OS_SOLARIS, OS_FREEBSD)
+        case (OS_UNKNOWN, OS_LINUX, OS_MACOS, OS_CYGWIN, OS_SOLARIS, OS_FREEBSD, OS_OPENBSD)
             filesep = '/'
         case (OS_WINDOWS)
             filesep = '\'
@@ -283,7 +297,7 @@ subroutine mkdir(dir)
     if (is_dir(dir)) return
 
     select case (get_os_type())
-        case (OS_UNKNOWN, OS_LINUX, OS_MACOS, OS_CYGWIN, OS_SOLARIS, OS_FREEBSD)
+        case (OS_UNKNOWN, OS_LINUX, OS_MACOS, OS_CYGWIN, OS_SOLARIS, OS_FREEBSD, OS_OPENBSD)
             call execute_command_line('mkdir -p ' // dir, exitstat=stat)
             write (*, '(" + ",2a)') 'mkdir -p ' // dir
 
@@ -293,8 +307,7 @@ subroutine mkdir(dir)
     end select
 
     if (stat /= 0) then
-        print *, 'execute_command_line() failed'
-        error stop
+        call fpm_stop(1, '*mkdir*:directory creation failed')
     end if
 end subroutine mkdir
 
@@ -322,7 +335,7 @@ recursive subroutine list_files(dir, files, recurse)
     allocate (temp_file, source=get_temp_filename())
 
     select case (get_os_type())
-        case (OS_UNKNOWN, OS_LINUX, OS_MACOS, OS_CYGWIN, OS_SOLARIS, OS_FREEBSD)
+        case (OS_UNKNOWN, OS_LINUX, OS_MACOS, OS_CYGWIN, OS_SOLARIS, OS_FREEBSD, OS_OPENBSD)
             call execute_command_line('ls -A ' // dir // ' > ' // temp_file, &
                                       exitstat=stat)
         case (OS_WINDOWS)
@@ -331,8 +344,7 @@ recursive subroutine list_files(dir, files, recurse)
     end select
 
     if (stat /= 0) then
-        print *, 'execute_command_line() failed'
-        error stop
+        call fpm_stop(2,'*list_files*:directory listing failed')
     end if
 
     open (newunit=fh, file=temp_file, status='old')
@@ -543,13 +555,11 @@ character(len=256)            :: message
         ios=0
     endif
     if(ios.ne.0)then
-        write(stderr,'(*(a:,1x))')&
-        & '<ERROR> *filewrite*:',filename,trim(message)
         lun=-1
         if(present(ier))then
            ier=ios
         else
-           stop 1
+           call fpm_stop(3,'*fileopen*:'//filename//':'//trim(message))
         endif
     endif
 
@@ -564,11 +574,10 @@ integer               :: ios
     if(lun.ne.-1)then
         close(unit=lun,iostat=ios,iomsg=message)
         if(ios.ne.0)then
-            write(stderr,'(*(a:,1x))')'<ERROR> *filewrite*:',trim(message)
             if(present(ier))then
                ier=ios
             else
-               stop 2
+               call fpm_stop(4,'*fileclose*:'//trim(message))
             endif
         endif
     endif
@@ -588,9 +597,7 @@ character(len=256)                    :: message
        do i=1,size(filedata)
            write(lun,'(a)',iostat=ios,iomsg=message)trim(filedata(i))
            if(ios.ne.0)then
-               write(stderr,'(*(a:,1x))')&
-               & '<ERROR> *filewrite*:',filename,trim(message)
-               stop 4
+               call fpm_stop(5,'*filewrite*:'//filename//':'//trim(message))
            endif
        enddo
     endif
@@ -599,14 +606,84 @@ character(len=256)                    :: message
 
 end subroutine filewrite
 
-!> Returns string with special characters replaced with an underscore.
-!! For now, only a hyphen is treated as a special character, but this can be
-!! expanded to other characters if needed.
-pure function to_fortran_name(string) result(res)
-    character(*), intent(in) :: string
-    character(len(string)) :: res
-    character, parameter :: SPECIAL_CHARACTERS(*) = ['-']
-    res = replace(string, SPECIAL_CHARACTERS, '_')
-end function to_fortran_name
+function which(command) result(pathname)
+!>
+!!##NAME
+!!     which(3f) - [M_io:ENVIRONMENT] given a command name find the pathname by searching
+!!                 the directories in the environment variable $PATH
+!!     (LICENSE:PD)
+!!
+!!##SYNTAX
+!!   function which(command) result(pathname)
+!!
+!!    character(len=*),intent(in)  :: command
+!!    character(len=:),allocatable :: pathname
+!!
+!!##DESCRIPTION
+!!    Given a command name find the first file with that name in the directories
+!!    specified by the environment variable $PATH.
+!!
+!!##OPTIONS
+!!    COMMAND   the command to search for
+!!
+!!##RETURNS
+!!    PATHNAME  the first pathname found in the current user path. Returns blank
+!!              if the command is not found.
+!!
+!!##EXAMPLE
+!!
+!!   Sample program:
+!!
+!!   Checking the error message and counting lines:
+!!
+!!     program demo_which
+!!     use M_io, only : which
+!!     implicit none
+!!        write(*,*)'ls is ',which('ls')
+!!        write(*,*)'dir is ',which('dir')
+!!        write(*,*)'install is ',which('install')
+!!     end program demo_which
+!!
+!!##AUTHOR
+!!    John S. Urban
+!!##LICENSE
+!!    Public Domain
+
+character(len=*),intent(in)     :: command
+character(len=:),allocatable    :: pathname, checkon, paths(:), exts(:)
+integer                         :: i, j
+   pathname=''
+   call split(get_env('PATH'),paths,delimiters=merge(';',':',separator().eq.'\'))
+   SEARCH: do i=1,size(paths)
+      checkon=trim(join_path(trim(paths(i)),command))
+      select case(separator())
+      case('/')
+         if(exists(checkon))then
+            pathname=checkon
+            exit SEARCH
+         endif
+      case('\')
+         if(exists(checkon))then
+            pathname=checkon
+            exit SEARCH
+         endif
+         if(exists(checkon//'.bat'))then
+            pathname=checkon//'.bat'
+            exit SEARCH
+         endif
+         if(exists(checkon//'.exe'))then
+            pathname=checkon//'.exe'
+            exit SEARCH
+         endif
+         call split(get_env('PATHEXT'),exts,delimiters=';')
+         do j=1,size(exts)
+            if(exists(checkon//'.'//trim(exts(j))))then
+               pathname=checkon//'.'//trim(exts(j))
+               exit SEARCH
+            endif
+         enddo
+      end select
+   enddo SEARCH
+end function which
 
 end module fpm_filesystem

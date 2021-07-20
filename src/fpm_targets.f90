@@ -25,7 +25,7 @@
 !>
 module fpm_targets
 use iso_fortran_env, only: int64
-use fpm_error, only: error_t, fatal_error
+use fpm_error, only: error_t, fatal_error, fpm_stop
 use fpm_model
 use fpm_environment, only: get_os_type, OS_WINDOWS
 use fpm_filesystem, only: dirname, join_path, canon_path
@@ -160,7 +160,6 @@ subroutine build_target_list(targets,model)
 
     integer :: i, j, n_source
     character(:), allocatable :: xsuffix, exe_dir
-    type(build_target_t), pointer :: dep
     logical :: with_lib
 
     ! Check for empty build (e.g. header-only lib)
@@ -258,7 +257,6 @@ subroutine build_target_list(targets,model)
 
         integer :: i
         character(1), parameter :: filesep = '/'
-        character(:), allocatable :: dir
 
         object_file = canon_path(source%file_name)
 
@@ -285,7 +283,6 @@ subroutine add_target(targets,type,output_file,source,link_libraries)
     type(string_t), intent(in), optional :: link_libraries(:)
 
     integer :: i
-    type(build_target_ptr), allocatable :: temp(:)
     type(build_target_t), pointer :: new_target
 
     if (.not.allocated(targets)) allocate(targets(0))
@@ -298,7 +295,7 @@ subroutine add_target(targets,type,output_file,source,link_libraries)
             write(*,*) 'Error while building target list: duplicate output object "',&
                         output_file,'"'
             if (present(source)) write(*,*) ' Source file: "',source%file_name,'"'
-            stop 1
+            call fpm_stop(1,' ')
 
         end if
 
@@ -341,7 +338,7 @@ end subroutine add_dependency
 !>
 !> - Executable sources (`FPM_SCOPE_APP`,`FPM_SCOPE_TEST`) may use
 !>   library modules (including dependencies) as well as any modules
-!>   corresponding to source files in the same directory or a 
+!>   corresponding to source files in the same directory or a
 !>   subdirectory of the executable source file.
 !>
 !> @warning If a module used by a source file cannot be resolved to

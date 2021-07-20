@@ -27,12 +27,14 @@
 !>
 module fpm_backend
 
-use fpm_environment, only: run
-use fpm_filesystem, only: dirname, join_path, exists, mkdir
+use,intrinsic :: iso_fortran_env, only : stdin=>input_unit, stdout=>output_unit, stderr=>error_unit
+use fpm_error, only : fpm_stop
+use fpm_environment, only: run, get_os_type, OS_WINDOWS
+use fpm_filesystem, only: basename, dirname, join_path, exists, mkdir, unix_path
 use fpm_model, only: fpm_model_t
 use fpm_targets, only: build_target_t, build_target_ptr, FPM_TARGET_OBJECT, &
                        FPM_TARGET_C_OBJECT, FPM_TARGET_ARCHIVE, FPM_TARGET_EXECUTABLE
-use fpm_strings, only: string_cat
+use fpm_strings, only: string_cat, string_t
 
 implicit none
 
@@ -48,7 +50,8 @@ subroutine build_package(targets,model)
 
     integer :: i, j
     type(build_target_ptr), allocatable :: queue(:)
-    integer, allocatable :: schedule_ptr(:)
+    integer, allocatable :: schedule_ptr(:), stat(:)
+    logical :: build_failed, skip_current
 
     ! Need to make output directory for include (mod) files
     if (.not.exists(join_path(model%output_directory,model%package_name))) then
@@ -65,16 +68,43 @@ subroutine build_package(targets,model)
     ! Construct build schedule queue
     call schedule_targets(queue, schedule_ptr, targets)
 
+    ! Initialise build status flags
+    allocate(stat(size(queue)))
+    stat(:) = 0
+    build_failed = .false.
+
     ! Loop over parallel schedule regions
     do i=1,size(schedule_ptr)-1
 
         ! Build targets in schedule region i
-        !$omp parallel do default(shared) schedule(dynamic,1)
+        !$omp parallel do default(shared) private(skip_current) schedule(dynamic,1)
         do j=schedule_ptr(i),(schedule_ptr(i+1)-1)
 
-            call build_target(model,queue(j)%ptr)
+            ! Check if build already failed
+            !$omp atomic read
+            skip_current = build_failed
+
+            if (.not.skip_current) then
+                call build_target(model,queue(j)%ptr,stat(j))
+            end if
+
+            ! Set global flag if this target failed to build
+            if (stat(j) /= 0) then
+                !$omp atomic write
+                build_failed = .true.
+            end if
 
         end do
+
+        ! Check if this schedule region failed: exit with message if failed
+        if (build_failed) then
+            do j=1,size(stat)
+                if (stat(j) /= 0) then
+                    write(stderr,'(*(g0:,1x))') '<ERROR> Compilation failed for object "',basename(queue(j)%ptr%output_file),'"'
+                end if
+            end do
+            call fpm_stop(1,'stopping due to failed compilation')
+        end if
 
     end do
 
@@ -96,8 +126,7 @@ end subroutine build_package
 recursive subroutine sort_target(target)
     type(build_target_t), intent(inout), target :: target
 
-    integer :: i, j, fh, stat
-    type(build_target_t), pointer :: exe_obj
+    integer :: i, fh, stat
 
     ! Check if target has already been processed (as a dependency)
     if (target%sorted .or. target%skip) then
@@ -107,8 +136,7 @@ recursive subroutine sort_target(target)
     ! Check for a circular dependency
     ! (If target has been touched but not processed)
     if (target%touched) then
-        write(*,*) '(!) Circular dependency found with: ',target%output_file
-        stop
+        call fpm_stop(1,'(!) Circular dependency found with: '//target%output_file)
     else
         target%touched = .true.  ! Set touched flag
     end if
@@ -223,12 +251,12 @@ end subroutine schedule_targets
 !>
 !> If successful, also caches the source file digest to disk.
 !>
-subroutine build_target(model,target)
+subroutine build_target(model,target,stat)
     type(fpm_model_t), intent(in) :: model
     type(build_target_t), intent(in), target :: target
+    integer, intent(out) :: stat
 
-    integer :: ilib, fh
-    character(:), allocatable :: link_flags
+    integer :: fh
 
     if (.not.exists(dirname(target%output_file))) then
         call mkdir(dirname(target%output_file))
@@ -238,28 +266,54 @@ subroutine build_target(model,target)
 
     case (FPM_TARGET_OBJECT)
         call run(model%fortran_compiler//" -c " // target%source%file_name // target%compile_flags &
-              // " -o " // target%output_file)
+              // " -o " // target%output_file, echo=.true., exitstat=stat)
 
     case (FPM_TARGET_C_OBJECT)
         call run(model%c_compiler//" -c " // target%source%file_name // target%compile_flags &
-                // " -o " // target%output_file)
+                // " -o " // target%output_file, echo=.true., exitstat=stat)
 
     case (FPM_TARGET_EXECUTABLE)
 
         call run(model%fortran_compiler// " " // target%compile_flags &
-              //" "//target%link_flags// " -o " // target%output_file)
+              //" "//target%link_flags// " -o " // target%output_file, echo=.true., exitstat=stat)
 
     case (FPM_TARGET_ARCHIVE)
-        call run(model%archiver // target%output_file // " " // string_cat(target%link_objects," "))
+
+        select case (get_os_type())
+        case (OS_WINDOWS)
+            call write_response_file(target%output_file//".resp" ,target%link_objects)
+            call run(model%archiver // target%output_file // " @" // target%output_file//".resp", &
+                     echo=.true., exitstat=stat)
+
+        case default
+            call run(model%archiver // target%output_file // " " // string_cat(target%link_objects," "), &
+                     echo=.true., exitstat=stat)
+
+        end select
 
     end select
 
-    if (allocated(target%source)) then
+    if (stat == 0 .and. allocated(target%source)) then
         open(newunit=fh,file=target%output_file//'.digest',status='unknown')
         write(fh,*) target%source%digest
         close(fh)
     end if
 
 end subroutine build_target
+
+!> Response files allow to read command line options from files.
+!> Whitespace is used to separate the arguments, we will use newlines
+!> as separator to create readable response files which can be inspected
+!> in case of errors.
+subroutine write_response_file(name, argv)
+    character(len=*), intent(in) :: name
+    type(string_t), intent(in) :: argv(:)
+    integer :: iarg, io
+    open(file=name, newunit=io)
+    do iarg = 1, size(argv)
+        write(io, '(a)') unix_path(argv(iarg)%s)
+    end do
+    close(io)
+end subroutine write_response_file
 
 end module fpm_backend

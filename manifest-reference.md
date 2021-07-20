@@ -78,6 +78,14 @@ A standardized way to manage and specify versions is the [Semantic Versioning] s
 version = "1.0.0"
 ```
 
+The version entry can also contain a filename relative to the project root, which contains the version number of the project
+
+*Example:*
+
+```toml
+version = "VERSION"
+```
+
 [Semantic Versioning]: https://semver.org
 
 
@@ -429,7 +437,7 @@ To use a specific upstream branch declare the *branch* name with
 
 ```toml
 [dependencies]
-toml-f = { git = "https://github.com/toml-f/toml-f", branch = "master" }
+toml-f = { git = "https://github.com/toml-f/toml-f", branch = "main" }
 ```
 
 Alternatively, reference tags by using the *tag* entry
