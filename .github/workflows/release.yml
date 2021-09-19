@@ -53,12 +53,6 @@ jobs:
         VERSION=$(git describe --tags --match 'v*' --always | tr -d 'v')
         echo "VERSION=${VERSION}" >> $GITHUB_ENV
 
-    # Note: this step is meant to remove the test targets from the package manifest,
-    #       a change in the package manifest might require to regenerate the patch file.
-    - name: Remove tests
-      run: |
-        patch -p1 < ./ci/single-file.patch
-
     - name: Install fpm
       uses: fortran-lang/setup-fpm@v3
       with:
@@ -82,10 +76,6 @@ jobs:
         gfortran ${{ env.OUTPUT }} -J ${{ env.BUILD_DIR }} -o ${{ env.BUILD_DIR }}/fpm
       env:
         BUILD_DIR: build/bootstrap
-
-    - name: Undo patch
-      run: |
-        patch -p1 -R < ./ci/single-file.patch
 
     - name: Build fpm with bootstrap version
       run: |
