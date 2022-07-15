@@ -111,6 +111,9 @@ type build_target_t
     !> Flag set if build target will be skipped (not built)
     logical :: skip = .false.
 
+    !> Implicit typing
+    logical :: implicit_typing = .false.
+
     !> Targets in the same schedule group are guaranteed to be independent
     integer :: schedule = -1
 
@@ -221,7 +224,8 @@ subroutine build_target_list(targets,model)
                     call add_target(targets,package=model%packages(j)%name,source = sources(i), &
                                 type = merge(FPM_TARGET_C_OBJECT,FPM_TARGET_OBJECT,&
                                                sources(i)%unit_type==FPM_UNIT_CSOURCE), &
-                                output_name = get_object_name(sources(i)))
+                                output_name = get_object_name(sources(i)), &
+                                implicit_typing = model%packages(j)%implicit_typing)
 
                     if (with_lib .and. sources(i)%unit_scope == FPM_SCOPE_LIB) then
                         ! Archive depends on object
@@ -299,13 +303,14 @@ end subroutine build_target_list
 
 
 !> Allocate a new target and append to target list
-subroutine add_target(targets,package,type,output_name,source,link_libraries)
+subroutine add_target(targets,package,type,output_name,source,link_libraries,implicit_typing)
     type(build_target_ptr), allocatable, intent(inout) :: targets(:)
     character(*), intent(in) :: package
     integer, intent(in) :: type
     character(*), intent(in) :: output_name
     type(srcfile_t), intent(in), optional :: source
     type(string_t), intent(in), optional :: link_libraries(:)
+    logical, intent(in), optional :: implicit_typing
 
     integer :: i
     type(build_target_t), pointer :: new_target
@@ -332,6 +337,7 @@ subroutine add_target(targets,package,type,output_name,source,link_libraries)
     new_target%package_name = package
     if (present(source)) new_target%source = source
     if (present(link_libraries)) new_target%link_libraries = link_libraries
+    if (present(implicit_typing)) new_target%implicit_typing = implicit_typing
     allocate(new_target%dependencies(0))
 
     targets = [targets, build_target_ptr(new_target)]
@@ -700,6 +706,10 @@ subroutine resolve_target_linking(targets, model)
         associate(target => targets(i)%ptr)
             if (target%target_type /= FPM_TARGET_C_OBJECT) then
                 target%compile_flags = model%fortran_compile_flags
+                if (.not.target%implicit_typing) then
+                  target%compile_flags = target%compile_flags // &
+                     & model%compiler%get_feature_flag("no-implicit-typing")
+               end if
             else
                 target%compile_flags = model%c_compile_flags
             end if

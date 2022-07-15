@@ -37,6 +37,9 @@ module fpm_manifest_build
         !> External modules to use
         type(string_t), allocatable :: external_modules(:)
 
+        !> Implicit typing
+        logical :: implicit_typing
+
     contains
 
         !> Print information on this instance
@@ -86,6 +89,12 @@ contains
             return
         end if
 
+        call get_value(table, "implicit-typing", self%implicit_typing, .false., stat=stat)
+
+        if (stat /= toml_stat%success) then
+            call fatal_error(error,"Error while reading value for 'implicit-typing' in fpm.toml, expecting logical")
+            return
+        end if
 
         call get_list(table, "link", self%link, error)
         if (allocated(error)) return
@@ -116,7 +125,8 @@ contains
         do ikey = 1, size(list)
             select case(list(ikey)%key)
 
-            case("auto-executables", "auto-examples", "auto-tests", "link", "external-modules")
+            case("auto-executables", "auto-examples", "auto-tests", "link", &
+                  & "external-modules", "implicit-typing")
                 continue
 
             case default

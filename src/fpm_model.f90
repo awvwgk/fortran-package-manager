@@ -122,6 +122,9 @@ type package_t
     !> Array of sources
     type(srcfile_t), allocatable :: sources(:)
 
+    !> Implicit typing
+    logical :: implicit_typing = .false.
+
 end type package_t
 
 

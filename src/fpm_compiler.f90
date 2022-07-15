@@ -91,6 +91,8 @@ contains
     procedure :: get_module_flag
     !> Get flag for include directories
     procedure :: get_include_flag
+    !> Get feature flag
+    procedure :: get_feature_flag
     !> Compile a Fortran object
     procedure :: compile_fortran
     !> Compile a C object
@@ -135,7 +137,8 @@ character(*), parameter :: &
     flag_gnu_warn = " -Wall -Wextra -Wimplicit-interface", &
     flag_gnu_check = " -fcheck=bounds -fcheck=array-temps", &
     flag_gnu_limit = " -fmax-errors=1", &
-    flag_gnu_external = " -Wimplicit-interface"
+    flag_gnu_external = " -Wimplicit-interface", &
+    flag_gnu_implicit_none = " -fimplicit-none"
 
 character(*), parameter :: &
     flag_pgi_backslash = " -Mbackslash", &
@@ -481,6 +484,22 @@ function get_module_flag(self, path) result(flags)
     end select
 
 end function get_module_flag
+
+function get_feature_flag(self, feature) result(flags)
+    class(compiler_t), intent(in) :: self
+    character(len=*), intent(in) :: feature
+    character(len=:), allocatable :: flags
+
+    flags = ""
+    select case(feature)
+    case("no-implicit-typing")
+       select case(self%id)
+       case(id_caf, id_gcc, id_f95)
+           flags = flag_gnu_implicit_none
+
+       end select
+    end select
+end function get_feature_flag
 
 
 subroutine get_default_c_compiler(f_compiler, c_compiler)
