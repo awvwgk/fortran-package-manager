@@ -912,7 +912,7 @@ module fpm_manifest_feature_collection
             ' -fPIC'))
             
         call collection%push_variant(default_variant('release', id_lfortran, OS_ALL, &
-            ' -fast', &
+            ' --fast', &
             ' -fPIC', &
             ' -fPIC'))
             
