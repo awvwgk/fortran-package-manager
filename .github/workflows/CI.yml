@@ -52,7 +52,7 @@ jobs:
         include:
           - os: ubuntu-latest
             os-arch: linux-x86_64
-            release-flags: --flag '-g -fbacktrace -O3 -fopenmp'
+            release-flags: --flag '-g -fbacktrace -O3 -fopenmp -static-libgcc -static-libgfortran'
           - os: macos-14
             os-arch: macos-arm64
             release-flags: --flag '-g -fbacktrace -O3 -fopenmp'
