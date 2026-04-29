@@ -50,9 +50,9 @@ jobs:
           - os: ubuntu-latest  # gcc 15 not available on Ubuntu via setup-fortran yet
             toolchain: {compiler: gcc, version: 15}
         include:
+          # os-arch is independent of toolchain version
           - os: ubuntu-latest
             os-arch: linux-x86_64
-            release-flags: --flag '-g -fbacktrace -O3 -fopenmp -static-libgcc -static-libgfortran'
           - os: macos-14
             os-arch: macos-arm64
             release-flags: --flag '-g -fbacktrace -O3 -fopenmp'
@@ -63,6 +63,28 @@ jobs:
             os-arch: windows-x86_64
             release-flags: --flag '--static -g -fbacktrace -O3 -fopenmp'
             exe: .exe
+          # Linux per-toolchain release-flags. gcc 14 builds the shipped
+          # artifact with -fopenmp; older gcc on linux segfault with
+          # --static + libgomp at atexit teardown (see issue #962), so
+          # they keep the original non-openmp release-flags.
+          - os: ubuntu-latest
+            toolchain: {compiler: gcc, version: 10}
+            release-flags: --flag '--static -g -fbacktrace -O3'
+          - os: ubuntu-latest
+            toolchain: {compiler: gcc, version: 11}
+            release-flags: --flag '--static -g -fbacktrace -O3'
+          - os: ubuntu-latest
+            toolchain: {compiler: gcc, version: 12}
+            release-flags: --flag '--static -g -fbacktrace -O3'
+          - os: ubuntu-latest
+            toolchain: {compiler: gcc, version: 13}
+            release-flags: --flag '--static -g -fbacktrace -O3'
+          - os: ubuntu-latest
+            toolchain: {compiler: gcc, version: 14}
+            release-flags: --flag '--static -g -fbacktrace -O3 -fopenmp'
+          - os: ubuntu-latest
+            toolchain: {compiler: intel, version: '2025.2'}
+            release-flags: --flag '--static -g -fbacktrace -O3'
           - os: macos-14
             toolchain: {compiler: gcc, version: 15}
             release-flags: --flag '-g -fbacktrace -Og -fcheck=all,no-recursion -Wno-external-argument-mismatch'
@@ -406,7 +428,7 @@ jobs:
       uses: actions/download-artifact@v8
       with:
         path: fpm-cd-artifacts
-        pattern: 'fpm-*-gcc-12*'
+        pattern: 'fpm-*-gcc-14*'
         merge-multiple: true
 
     - name: Normalize file names for continuous delivery
