@@ -61,7 +61,7 @@ jobs:
           "$BIN" --version
           "$BIN" --help
 
-      - name: Stress: run with OMP_NUM_THREADS=4
+      - name: "Stress run with OMP_NUM_THREADS=4"
         env:
           OMP_NUM_THREADS: 4
         run: |
