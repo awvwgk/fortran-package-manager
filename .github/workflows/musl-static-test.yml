@@ -1,0 +1,82 @@
+name: musl-static-omp-test
+
+on:
+  push:
+    branches: [openmp-release]
+  workflow_dispatch:
+
+jobs:
+  alpine-static-omp:
+    runs-on: ubuntu-latest
+    container:
+      image: alpine:3.18
+
+    steps:
+      - name: Install toolchain
+        run: apk add --no-cache build-base gfortran git bash patch curl
+
+      - name: Show toolchain versions
+        run: |
+          gcc --version
+          gfortran --version
+          ldd --version || true
+          cat /etc/alpine-release
+
+      - uses: actions/checkout@v6
+
+      - name: Mark workspace safe for git
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Bootstrap fpm from prebuilt single-source
+        env:
+          BOOTSTRAP_VERSION: "0.13.0"
+        run: |
+          curl -L "https://github.com/fortran-lang/fpm/releases/download/v${BOOTSTRAP_VERSION}/fpm-${BOOTSTRAP_VERSION}.F90" -o fpm-bootstrap.F90
+          gfortran -O2 -static fpm-bootstrap.F90 -o fpm-bootstrap
+          ./fpm-bootstrap --version
+
+      - name: Build fpm fully static with -fopenmp
+        run: |
+          ./fpm-bootstrap build --flag '--static -g -fbacktrace -O3 -fopenmp'
+
+      - name: Locate built fpm binary
+        id: locate
+        run: |
+          BIN=$(find build -type f -name fpm -perm -u+x | head -n 1)
+          echo "BIN=${BIN}" >> "$GITHUB_ENV"
+          echo "Built fpm at: ${BIN}"
+
+      - name: Verify binary is fully static
+        run: |
+          file "$BIN"
+          if ldd "$BIN" 2>&1 | grep -q "not a dynamic executable\|statically linked"; then
+            echo "OK: fully static"
+          else
+            echo "WARN: ldd output below"
+            ldd "$BIN" || true
+          fi
+
+      - name: Run release-built fpm (probe libgomp atexit)
+        run: |
+          "$BIN" --version
+          "$BIN" --help
+
+      - name: Stress: run with OMP_NUM_THREADS=4
+        env:
+          OMP_NUM_THREADS: 4
+        run: |
+          "$BIN" --version
+          "$BIN" --help
+
+      - name: Self-build via release-built fpm
+        env:
+          OMP_NUM_THREADS: 4
+        run: |
+          "$BIN" build --flag '-O0 -fopenmp'
+          "$BIN" run --flag '-O0 -fopenmp' -- --version
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: fpm-musl-static-omp-gcc12
+          path: ${{ env.BIN }}
