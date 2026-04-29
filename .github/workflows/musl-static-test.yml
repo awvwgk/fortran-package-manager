@@ -71,11 +71,47 @@ jobs:
       - name: Self-build via release-built fpm
         env:
           OMP_NUM_THREADS: 4
+          OMP_STACKSIZE: 16M
         run: |
-          "$BIN" build --flag '-O0 -fopenmp'
-          "$BIN" run --flag '-O0 -fopenmp' -- --version
+          "$BIN" build --flag '-O0 -g -fopenmp -fno-omit-frame-pointer'
+          "$BIN" run --flag '-O0 -g -fopenmp -fno-omit-frame-pointer' -- --version
+
+      - name: Diagnostics on self-build failure
+        if: failure()
+        env:
+          OMP_STACKSIZE: 16M
+        run: |
+          apk add --no-cache gdb binutils file
+          set +e
+          echo "=== file/size of release-built fpm ==="
+          file "$BIN"
+          ls -la "$BIN"
+          echo "=== ulimit / stack info ==="
+          ulimit -a
+          echo "=== addr2line on prior-run frames ==="
+          for addr in 0x6a03b8 0x69f9f5 0x708367; do
+            addr2line -e "$BIN" -f -i -C "$addr" || true
+          done
+          echo "=== Re-try with OMP_NUM_THREADS=1 ==="
+          OMP_NUM_THREADS=1 "$BIN" build --flag '-O0 -g -fopenmp -fno-omit-frame-pointer'
+          echo "exit=$?"
+          echo "=== Re-try with OMP_NUM_THREADS=2 ==="
+          OMP_NUM_THREADS=2 "$BIN" build --flag '-O0 -g -fopenmp -fno-omit-frame-pointer'
+          echo "exit=$?"
+          echo "=== Re-try without -fopenmp (sanity: backend running serial) ==="
+          "$BIN" build --flag '-O0 -g -fno-omit-frame-pointer'
+          echo "exit=$?"
+          echo "=== Run under gdb (OMP_NUM_THREADS=4) ==="
+          OMP_NUM_THREADS=4 gdb --batch \
+            -ex 'set pagination off' \
+            -ex 'set print thread-events off' \
+            -ex 'handle SIG34 nostop noprint' \
+            -ex 'run build --flag "-O0 -g -fopenmp -fno-omit-frame-pointer"' \
+            -ex 'thread apply all bt full' \
+            --args "$BIN" 2>&1 | head -300
 
       - name: Upload artifact
+        if: success()
         uses: actions/upload-artifact@v7
         with:
           name: fpm-musl-static-omp-gcc12
