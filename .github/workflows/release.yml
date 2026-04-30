@@ -80,7 +80,7 @@ jobs:
         # Intel compiler predefines "linux" and "unix" which causes inadvertent substitutions
         echo "#undef linux"          >> fpm-${{ env.VERSION }}.F90
         echo "#undef unix"           >> fpm-${{ env.VERSION }}.F90
-        fpm build --compiler ./ci/single-file-gfortran.sh
+        fpm build --verbose --compiler ./ci/single-file-gfortran.sh
       env:
         OUTPUT: fpm-${{ env.VERSION }}.F90
         OMP_NUM_THREADS: 1
@@ -101,7 +101,7 @@ jobs:
 
     - name: Build fpm with bootstrap version
       run: |
-        ${{ env.EXE }} build 
+        ${{ env.EXE }} build --verbose
 
     - name: Upload artifact
       uses: actions/upload-artifact@v7
@@ -153,7 +153,7 @@ jobs:
     - name: Move/Create continuous tag
       if: ${{ github.event_name == 'push' && steps.deploy-on-push.outputs.result != 0 }}
       run: |
-        git tag --force 'current' ${{ github.sha }}
+        git tag --force 'current' "$GITHUB_SHA"
         git push --tags --force
 
     - name: Upload assets

@@ -96,7 +96,7 @@ jobs:
 
     - name: Setup Fortran compiler
       uses: fortran-lang/setup-fortran@v1.9.0
-      id: setup-fortran 
+      id: setup-fortran
       with:
         compiler: ${{ matrix.toolchain.compiler }}
         version: ${{ matrix.toolchain.version }}
@@ -206,30 +206,30 @@ jobs:
     - name: Build Fortran fpm (bootstrap)
       shell: bash
       run: |
-        ${{ env.BOOTSTRAP }} build
+        ${{ env.BOOTSTRAP }} build --verbose
 
     - name: Run Fortran fpm (bootstrap)
       shell: bash
       run: |
-        ${{ env.BOOTSTRAP }} run
-        ${{ env.BOOTSTRAP }} run -- --version
-        ${{ env.BOOTSTRAP }} run -- --help
+        ${{ env.BOOTSTRAP }} run --verbose
+        ${{ env.BOOTSTRAP }} run --verbose -- --version
+        ${{ env.BOOTSTRAP }} run --verbose -- --help
 
     - name: Test Fortran fpm (bootstrap)
       shell: bash
       run: |
-        ${{ env.BOOTSTRAP }} test --flag " -Wno-external-argument-mismatch"
+        ${{ env.BOOTSTRAP }} test --verbose --flag " -Wno-external-argument-mismatch"
 
     - name: Install Fortran fpm (bootstrap)
       shell: bash
       run: |
-        ${{ env.BOOTSTRAP }} install
+        ${{ env.BOOTSTRAP }} install --verbose
 
     # Phase 2: Bootstrap fpm with itself
     - name: Replace bootstrapping version
       shell: bash
       run: |
-        ${{ env.BOOTSTRAP }} run --runner cp -- fpm-debug${{ matrix.exe }}
+        ${{ env.BOOTSTRAP }} run --verbose --runner cp -- fpm-debug${{ matrix.exe }}
         rm -v ${{ env.BOOTSTRAP }}
         echo "FPM=$PWD/fpm-debug" >> $GITHUB_ENV
 
@@ -244,9 +244,9 @@ jobs:
       if: github.event_name == 'release'
       shell: bash
       run: |
-        VERSION=$(echo ${{ github.ref }} | cut -dv -f2)
+        VERSION=$(echo "$GITHUB_REF" | cut -dv -f2)
         echo "VERSION=$VERSION" >> $GITHUB_ENV
-        FPM_VERSION=$(${{ env.FPM }} --version | grep -o '${{ env.REGEX }}')
+        FPM_VERSION=$("$FPM" --version | grep -o "$REGEX")
         [ "$VERSION" = "$FPM_VERSION" ]
       env:
         REGEX: '[0-9]\{1,4\}\.[0-9]\{1,4\}\.[0-9]\{1,4\}'
@@ -254,29 +254,29 @@ jobs:
     - name: Build Fortran fpm
       shell: bash
       run: |
-        ${{ env.FPM }} build ${{ matrix.release-flags }}
+        ${{ env.FPM }} build --verbose ${{ matrix.release-flags }}
 
     - name: Run Fortran fpm
       shell: bash
       run: |
-        ${{ env.FPM }} run ${{ matrix.release-flags }}
-        ${{ env.FPM }} run ${{ matrix.release-flags }} -- --version
-        ${{ env.FPM }} run ${{ matrix.release-flags }} -- --help
+        ${{ env.FPM }} run --verbose ${{ matrix.release-flags }}
+        ${{ env.FPM }} run --verbose ${{ matrix.release-flags }} -- --version
+        ${{ env.FPM }} run --verbose ${{ matrix.release-flags }} -- --help
 
     - name: Test Fortran fpm
       shell: bash
       run: |
-        ${{ env.FPM }} test ${{ matrix.release-flags }}
+        ${{ env.FPM }} test --verbose ${{ matrix.release-flags }}
 
     - name: Install Fortran fpm
       shell: bash
       run: |
-        ${{ env.FPM }} install ${{ matrix.release-flags }}
+        ${{ env.FPM }} install --verbose ${{ matrix.release-flags }}
 
     - name: Package release version
       shell: bash
       run: |
-        ${{ env.FPM }} run ${{ matrix.release-flags }} --runner cp -- ${{ env.EXE }}
+        ${{ env.FPM }} run --verbose ${{ matrix.release-flags }} --runner cp -- ${{ env.EXE }}
         rm -v ${{ env.FPM }}
         echo "FPM_RELEASE=${{ env.EXE }}" >> $GITHUB_ENV
       env:
@@ -286,6 +286,18 @@ jobs:
       shell: bash
       run: |
         ci/run_tests.sh "$PWD/${{ env.FPM_RELEASE }}"
+
+    # Exercise the parallel backend of the just-built release fpm. Skips on
+    # matrix entries that did not opt into the openmp metapackage feature.
+    - name: Verify parallel build with release fpm
+      if: contains(matrix.release-flags, 'openmp')
+      shell: bash
+      env:
+        OMP_NUM_THREADS: 4
+      run: |
+        "$PWD/${{ env.FPM_RELEASE }}" --version
+        rm -rf build
+        time "$PWD/${{ env.FPM_RELEASE }}" build --verbose ${{ matrix.release-flags }}
 
     - name: Upload artifact
       uses: actions/upload-artifact@v7
@@ -325,7 +337,7 @@ jobs:
       if: github.event_name == 'release'
       shell: bash
       run: |
-        VERSION=$(echo ${{ github.ref }} | cut -dv -f2)
+        VERSION=$(echo "$GITHUB_REF" | cut -dv -f2)
         echo "VERSION=$VERSION" >> $GITHUB_ENV
       env:
         REGEX: '[0-9]\{1,4\}\.[0-9]\{1,4\}\.[0-9]\{1,4\}'
@@ -385,7 +397,7 @@ jobs:
       run: choco install nsis -y
       shell: pwsh
 
-    - name: Add NSIS to PATH 
+    - name: Add NSIS to PATH
       shell: pwsh
       run: |
         $dirs = @(
@@ -452,7 +464,7 @@ jobs:
     - name: Move/Create continuous tag
       if: ${{ github.event_name == 'push' && steps.deploy-on-push.outputs.result != 0 }}
       run: |
-        git tag --force 'current' ${{ github.sha }}
+        git tag --force 'current' "$GITHUB_SHA"
         git push --tags --force
 
     - name: Upload assets
