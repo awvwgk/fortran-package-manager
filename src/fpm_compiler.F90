@@ -1428,6 +1428,10 @@ subroutine compile_fortran(self, input, output, args, log_file, stat, table, dry
     type(error_t), allocatable :: error
     logical :: mock
 
+    ! Initialize intent(out) status so the mock path with no table returns
+    ! a defined value.
+    stat = 0
+
     ! Check if we're actually building this file
     mock = .false.
     if (present(dry_run)) mock = dry_run
@@ -1473,6 +1477,10 @@ subroutine compile_c(self, input, output, args, log_file, stat, table, dry_run)
     type(error_t), allocatable :: error
     logical :: mock
 
+    ! Initialize intent(out) status so the mock path with no table returns
+    ! a defined value.
+    stat = 0
+
     ! Check if we're actually building this file
     mock = .false.
     if (present(dry_run)) mock = dry_run
@@ -1516,6 +1524,10 @@ subroutine compile_cpp(self, input, output, args, log_file, stat, table, dry_run
     character(len=:), allocatable :: command
     type(error_t), allocatable :: error
     logical :: mock
+
+    ! Initialize intent(out) status so the mock path with no table returns
+    ! a defined value.
+    stat = 0
 
     ! Check if we're actually building this file
     mock = .false.
