@@ -1,4 +1,4 @@
-ß!># Define compiler command options
+!># Define compiler command options
 !!
 !! This module defines compiler options to use for the debug and release builds.
 
