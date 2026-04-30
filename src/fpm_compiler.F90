@@ -1556,6 +1556,9 @@ subroutine link_executable(self, output, args, log_file, stat, dry_run)
     character(len=:), allocatable :: command
     logical :: mock
 
+    ! Initialize intent(out) status so the mock path returns a defined value.
+    stat = 0
+
     ! Check if we're actually linking
     mock = .false.
     if (present(dry_run)) mock = dry_run
@@ -1593,6 +1596,9 @@ subroutine link_shared(self, output, args, log_file, stat, dry_run)
     logical :: mock
     character(len=:), allocatable :: shared_flag
 
+    ! Initialize intent(out) status so the mock path returns a defined value.
+    stat = 0
+
     mock = .false.
     if (present(dry_run)) mock = dry_run
 
@@ -1628,6 +1634,9 @@ subroutine make_archive(self, output, args, log_file, stat, dry_run)
     logical, optional, intent(in) :: dry_run
 
     logical :: mock
+
+    ! Initialize intent(out) status so the mock path returns a defined value.
+    stat = 0
 
     ! Check if we're actually linking
     mock = .false.
