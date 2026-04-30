@@ -1563,9 +1563,14 @@ subroutine link_executable(self, output, args, log_file, stat, dry_run)
     ! Set command
     command = self%fc // " " // args // " -o " // output
 
-    ! Execute command
-    if (.not.mock) &
-    call run(command, echo=self%echo, verbose=self%verbose, redirect=log_file, exitstat=stat)
+    ! Execute command. Serialize concurrent forks: gfortran's
+    ! execute_command_line uses system(3) which forks, and concurrent
+    ! fork from OpenMP threads is documented non-thread-safe.
+    if (.not.mock) then
+        !$omp critical (run_command)
+        call run(command, echo=self%echo, verbose=self%verbose, redirect=log_file, exitstat=stat)
+        !$omp end critical (run_command)
+    end if
 
 end subroutine link_executable
 
@@ -1595,8 +1600,11 @@ subroutine link_shared(self, output, args, log_file, stat, dry_run)
 
     command = self%fc // " " // shared_flag // " " // args // " -o " // output
 
-    if (.not.mock) &
+    if (.not.mock) then
+        !$omp critical (run_command)
         call run(command, echo=self%echo, verbose=self%verbose, redirect=log_file, exitstat=stat)
+        !$omp end critical (run_command)
+    end if
 
 end subroutine link_shared
 
@@ -1629,13 +1637,17 @@ subroutine make_archive(self, output, args, log_file, stat, dry_run)
 
     if (self%use_response_file) then
         call write_response_file(output//".resp" , args)
+        !$omp critical (run_command)
         call run(self%ar // output // " @" // output//".resp", echo=self%echo, &
             &  verbose=self%verbose, redirect=log_file, exitstat=stat)
+        !$omp end critical (run_command)
         call delete_file_win32(output//".resp")
 
     else
+        !$omp critical (run_command)
         call run(self%ar // output // " " // string_cat(args, " "), &
             & echo=self%echo, verbose=self%verbose, redirect=log_file, exitstat=stat)
+        !$omp end critical (run_command)
     end if
 
     contains
