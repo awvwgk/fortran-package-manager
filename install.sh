@@ -11,7 +11,7 @@ usage()
     echo ""
     echo " --help             Display this help text"
     echo " --prefix=PREFIX    Install binary in 'PREFIX/bin'"
-    echo "                    Default prefix='\$HOME/.local/bin'"
+    echo "                    Default prefix='\$HOME/.local'"
     echo " --openmp           Build fpm with OpenMP support (default)"
     echo " --no-openmp        Build fpm without OpenMP support"
     echo ""
