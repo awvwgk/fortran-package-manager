@@ -80,7 +80,7 @@ jobs:
         # Intel compiler predefines "linux" and "unix" which causes inadvertent substitutions
         echo "#undef linux"          >> fpm-${{ env.VERSION }}.F90
         echo "#undef unix"           >> fpm-${{ env.VERSION }}.F90
-        fpm build --verbose --compiler ./ci/single-file-gfortran.sh
+        fpm build --compiler ./ci/single-file-gfortran.sh
       env:
         OUTPUT: fpm-${{ env.VERSION }}.F90
         OMP_NUM_THREADS: 1
@@ -101,7 +101,7 @@ jobs:
 
     - name: Build fpm with bootstrap version
       run: |
-        ${{ env.EXE }} build --verbose
+        ${{ env.EXE }} build
 
     - name: Upload artifact
       uses: actions/upload-artifact@v7
